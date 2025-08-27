@@ -1,75 +1,151 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import React from "react";
+import { View, Text, StyleSheet, TouchableOpacity, FlatList } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function HomeScreen() {
+  const recentTrips = [
+    { id: "1", from: "Warehouse A", to: "Client B", status: "Completed" },
+    { id: "2", from: "Warehouse C", to: "Client D", status: "Completed" },
+    { id: "3", from: "Warehouse A", to: "Client E", status: "In Progress" },
+  ];
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome to Coninx App!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      {/* Header */}
+      <Text style={styles.welcome}>Hi, Driver 👋</Text>
+      <Text style={styles.subtitle}>Here’s your dispatch dashboard</Text>
+
+      {/* Status Card */}
+      <View style={styles.card}>
+        <Ionicons name="car-outline" size={28} color="#007AFF" />
+        <View style={{ marginLeft: 12 }}>
+          <Text style={styles.cardTitle}>Status: Online</Text>
+          <Text style={styles.cardSubtitle}>2 trips assigned today</Text>
+        </View>
+      </View>
+
+      {/* Next Assignment */}
+      <View style={styles.assignmentCard}>
+        <Text style={styles.sectionTitle}>Next Dispatch</Text>
+        <Text style={styles.assignmentText}>Pickup: Warehouse A</Text>
+        <Text style={styles.assignmentText}>Dropoff: Client E</Text>
+        <TouchableOpacity style={styles.startButton}>
+          <Text style={styles.startButtonText}>Start Trip</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Recent Trips */}
+      <Text style={styles.sectionTitle}>Recent Trips</Text>
+      <FlatList
+        data={recentTrips}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.tripItem}>
+            <Ionicons name="location-outline" size={22} color="#555" />
+            <View style={{ marginLeft: 10 }}>
+              <Text style={styles.tripText}>
+                {item.from} → {item.to}
+              </Text>
+              <Text style={styles.tripStatus}>{item.status}</Text>
+            </View>
+          </View>
+        )}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f7fa",
+    paddingHorizontal: 20,
+    paddingTop: 50,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  welcome: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#222",
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  subtitle: {
+    fontSize: 16,
+    color: "#555",
+    marginBottom: 20,
+  },
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+    marginBottom: 20,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#222",
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    color: "#666",
+  },
+  assignmentCard: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 25,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 12,
+    color: "#222",
+  },
+  assignmentText: {
+    fontSize: 16,
+    marginBottom: 6,
+    color: "#444",
+  },
+  startButton: {
+    marginTop: 12,
+    backgroundColor: "#007AFF",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  startButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  tripItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tripText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#222",
+  },
+  tripStatus: {
+    fontSize: 14,
+    color: "#007AFF",
   },
 });
+
