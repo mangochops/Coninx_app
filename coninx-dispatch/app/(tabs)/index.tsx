@@ -27,8 +27,9 @@ export default function HomeScreen() {
       {/* Next Assignment */}
       <View style={styles.assignmentCard}>
         <Text style={styles.sectionTitle}>Next Dispatch</Text>
-        <Text style={styles.assignmentText}>Pickup: Warehouse A</Text>
-        <Text style={styles.assignmentText}>Dropoff: Client E</Text>
+        <Text style={styles.assignmentText}>Dropoff: Dagoreti Corner</Text>
+        <Text style={styles.assignmentText}>Client: Mbugua Kamau</Text>
+        <Text style={styles.assignmentText}>Invoice No.: INV 003</Text>
         <TouchableOpacity style={styles.startButton}>
           <Text style={styles.startButtonText}>Start Trip</Text>
         </TouchableOpacity>

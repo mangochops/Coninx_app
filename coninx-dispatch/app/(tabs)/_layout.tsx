@@ -25,21 +25,64 @@ export default function TabLayout() {
           },
           default: {},
         }),
-      }}>
+      }}
+    >
+      {/* 🏠 Home */}
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="house.fill" color={color} />
+          ),
         }}
       />
+
+      {/* 📦 Jobs */}
       <Tabs.Screen
-        name="explore"
+        name="jobs"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Jobs',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="briefcase.fill" color={color} />
+          ),
+        }}
+      />
+
+      {/* 🗺 Map */}
+      <Tabs.Screen
+        name="map"
+        options={{
+          title: 'Map',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="map.fill" color={color} />
+          ),
+        }}
+      />
+
+      {/* 🔔 Notifications */}
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Notifications',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="bell.fill" color={color} />
+          ),
+        }}
+      />
+
+      {/* 👤 Profile */}
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="person.crop.circle" color={color} />
+          ),
         }}
       />
     </Tabs>
   );
 }
+
+

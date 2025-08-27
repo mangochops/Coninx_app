@@ -14,10 +14,11 @@ type IconSymbolName = keyof typeof MAPPING;
  * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
  */
 const MAPPING = {
-  'house.fill': 'home',
-  'paperplane.fill': 'send',
-  'chevron.left.forwardslash.chevron.right': 'code',
-  'chevron.right': 'chevron-right',
+  'house.fill': 'home',            // Home
+  'briefcase.fill': 'work',        // Jobs
+  'map.fill': 'map',               // Maps
+  'bell.fill': 'notifications',    // Notification
+  'person.crop.circle': 'person',  // Profile
 } as IconMapping;
 
 /**
@@ -39,3 +40,4 @@ export function IconSymbol({
 }) {
   return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
 }
+
