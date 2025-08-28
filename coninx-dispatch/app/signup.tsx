@@ -9,22 +9,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/native';
+import { router } from "expo-router";
 
-// Define the RootStackParamList type
-export type RootStackParamList = {
-  Signup: undefined;
-  Login: undefined;
-};
-
-type SignupScreenProps = {
-  navigation: StackNavigationProp<RootStackParamList, 'Signup'>;
-  route: RouteProp<RootStackParamList, 'Signup'>;
-};
-
-
-export default function SignupScreen({ navigation }: SignupScreenProps) {
+export default function SignupScreen() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -68,7 +55,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
       Alert.alert("Success", message, [
         {
           text: "OK",
-          onPress: () => navigation.navigate("Login"), // ✅ go to login
+          onPress: () => router.replace("/login"), // ✅ go to login page
         },
       ]);
     } catch (error) {
@@ -141,10 +128,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
 
         <Text style={styles.footerText}>
           Already have an account?{" "}
-          <Text
-            style={styles.link}
-            onPress={() => navigation.navigate("Login")}
-          >
+          <Text style={styles.link} onPress={() => router.push("/login")}>
             Log in
           </Text>
         </Text>

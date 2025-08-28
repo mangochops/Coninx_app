@@ -9,28 +9,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { StackNavigationProp } from "@react-navigation/stack";
-import { RouteProp } from "@react-navigation/native";
+import { router } from "expo-router";
 
-type RootStackParamList = {
-  Login: undefined;
-  Signup: undefined;
-  MainTabs: undefined;
-};
-
-type LoginScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  "Login"
->;
-
-type LoginScreenRouteProp = RouteProp<RootStackParamList, "Login">;
-
-type Props = {
-  navigation: LoginScreenNavigationProp;
-  route: LoginScreenRouteProp;
-};
-
-export default function LoginScreen({ navigation }: Props) {
+export default function LoginScreen() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,14 +24,17 @@ export default function LoginScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/driver/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phoneNumber: parseInt(phoneNumber, 10),
-          password,
-        }),
-      });
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_BACKEND_URL}/driver/login`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phoneNumber: parseInt(phoneNumber, 10),
+            password,
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Invalid credentials");
@@ -59,11 +43,8 @@ export default function LoginScreen({ navigation }: Props) {
       const data = await response.text(); // backend returns plain text
       Alert.alert("Success", data);
 
-      // ✅ Navigate to home tab after successful login
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "MainTabs" }],
-      });
+      // 🚀 Go to the tab layout (Home is index.tsx inside /app/(tabs)/ )
+      router.replace("/(tabs)");
     } catch (err) {
       Alert.alert("Login failed", (err as Error).message);
     } finally {
@@ -97,7 +78,11 @@ export default function LoginScreen({ navigation }: Props) {
           onChangeText={setPassword}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleLogin}
+          disabled={loading}
+        >
           <Text style={styles.buttonText}>
             {loading ? "Logging in..." : "Login"}
           </Text>
@@ -107,7 +92,7 @@ export default function LoginScreen({ navigation }: Props) {
           Don’t have an account?{" "}
           <Text
             style={styles.link}
-            onPress={() => navigation.navigate("Signup")}
+            onPress={() => router.push("/signup")}
           >
             Sign up
           </Text>
@@ -175,5 +160,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
 
 
