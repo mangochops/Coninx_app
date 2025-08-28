@@ -9,8 +9,28 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { StackNavigationProp } from "@react-navigation/stack";
+import { RouteProp } from "@react-navigation/native";
 
-export default function LoginScreen({ navigation }) {
+type RootStackParamList = {
+  Login: undefined;
+  Signup: undefined;
+  MainTabs: undefined;
+};
+
+type LoginScreenNavigationProp = StackNavigationProp<
+  RootStackParamList,
+  "Login"
+>;
+
+type LoginScreenRouteProp = RouteProp<RootStackParamList, "Login">;
+
+type Props = {
+  navigation: LoginScreenNavigationProp;
+  route: LoginScreenRouteProp;
+};
+
+export default function LoginScreen({ navigation }: Props) {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,7 +43,7 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await fetch("http://<YOUR_SERVER_IP>:<PORT>/driver/login", {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/driver/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -45,7 +65,7 @@ export default function LoginScreen({ navigation }) {
         routes: [{ name: "MainTabs" }],
       });
     } catch (err) {
-      Alert.alert("Login failed", err.message);
+      Alert.alert("Login failed", (err as Error).message);
     } finally {
       setLoading(false);
     }
