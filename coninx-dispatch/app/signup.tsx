@@ -9,14 +9,31 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RouteProp } from '@react-navigation/native';
 
-const Signup = () => {
-  const [email, setEmail] = useState("");
+// Define the RootStackParamList type
+export type RootStackParamList = {
+  Signup: undefined;
+  Login: undefined;
+};
+
+type SignupScreenProps = {
+  navigation: StackNavigationProp<RootStackParamList, 'Signup'>;
+  route: RouteProp<RootStackParamList, 'Signup'>;
+};
+
+
+export default function SignupScreen({ navigation }: SignupScreenProps) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSignup = () => {
-    if (!email || !password || !confirmPassword) {
+  const handleSignup = async () => {
+    if (!firstName || !lastName || !phoneNumber || !password || !confirmPassword) {
       Alert.alert("Error", "Please fill in all fields.");
       return;
     }
@@ -26,8 +43,39 @@ const Signup = () => {
       return;
     }
 
-    console.log("Signing up with:", email, password);
-    Alert.alert("Success", "Signup successful!");
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_BACKEND_URL}/driver/register`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            firstName,
+            lastName,
+            phoneNumber: parseInt(phoneNumber, 10),
+            password,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to register");
+      }
+
+      const message = await response.text();
+      Alert.alert("Success", message, [
+        {
+          text: "OK",
+          onPress: () => navigation.navigate("Login"), // ✅ go to login
+        },
+      ]);
+    } catch (error) {
+      Alert.alert("Error", error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -36,22 +84,38 @@ const Signup = () => {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.card}>
-        <Text style={styles.title}>Create Account</Text>
+        <Text style={styles.title}>Driver Signup</Text>
 
         <TextInput
           style={styles.input}
-          placeholder="Email"
+          placeholder="First Name"
           placeholderTextColor="#999"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
+          value={firstName}
+          onChangeText={setFirstName}
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Last Name"
+          placeholderTextColor="#999"
+          value={lastName}
+          onChangeText={setLastName}
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Phone Number"
+          placeholderTextColor="#999"
+          keyboardType="phone-pad"
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
         />
 
         <TextInput
           style={styles.input}
           placeholder="Password"
           placeholderTextColor="#999"
-          secureTextEntry={true}
+          secureTextEntry
           value={password}
           onChangeText={setPassword}
         />
@@ -60,22 +124,34 @@ const Signup = () => {
           style={styles.input}
           placeholder="Confirm Password"
           placeholderTextColor="#999"
-          secureTextEntry={true}
+          secureTextEntry
           value={confirmPassword}
           onChangeText={setConfirmPassword}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleSignup}>
-          <Text style={styles.buttonText}>Sign Up</Text>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleSignup}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? "Signing Up..." : "Sign Up"}
+          </Text>
         </TouchableOpacity>
 
         <Text style={styles.footerText}>
-          Already have an account? <Text style={styles.link}>Log in</Text>
+          Already have an account?{" "}
+          <Text
+            style={styles.link}
+            onPress={() => navigation.navigate("Login")}
+          >
+            Log in
+          </Text>
         </Text>
       </View>
     </KeyboardAvoidingView>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -136,4 +212,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Signup;
+

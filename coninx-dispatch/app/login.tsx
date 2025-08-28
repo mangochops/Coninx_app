@@ -10,16 +10,44 @@ import {
   Platform,
 } from "react-native";
 
-export default function Login() {
-  const [username, setUsername] = useState("");
+export default function LoginScreen({ navigation }) {
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (username === "user" && password === "password") {
-      Alert.alert("Login Successful");
-      // You can navigate to the next screen here
-    } else {
-      Alert.alert("Invalid Credentials");
+  const handleLogin = async () => {
+    if (!phoneNumber || !password) {
+      Alert.alert("Error", "Please fill in all fields.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch("http://<YOUR_SERVER_IP>:<PORT>/driver/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: parseInt(phoneNumber, 10),
+          password,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Invalid credentials");
+      }
+
+      const data = await response.text(); // backend returns plain text
+      Alert.alert("Success", data);
+
+      // ✅ Navigate to home tab after successful login
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "MainTabs" }],
+      });
+    } catch (err) {
+      Alert.alert("Login failed", err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -29,14 +57,15 @@ export default function Login() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.card}>
-        <Text style={styles.title}>Welcome Back</Text>
+        <Text style={styles.title}>Driver Login</Text>
 
         <TextInput
           style={styles.input}
-          placeholder="Username"
+          placeholder="Phone Number"
           placeholderTextColor="#999"
-          value={username}
-          onChangeText={setUsername}
+          keyboardType="phone-pad"
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
         />
 
         <TextInput
@@ -48,12 +77,20 @@ export default function Login() {
           onChangeText={setPassword}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Login</Text>
+        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
+          <Text style={styles.buttonText}>
+            {loading ? "Logging in..." : "Login"}
+          </Text>
         </TouchableOpacity>
 
         <Text style={styles.footerText}>
-          Don’t have an account? <Text style={styles.link}>Sign up</Text>
+          Don’t have an account?{" "}
+          <Text
+            style={styles.link}
+            onPress={() => navigation.navigate("Signup")}
+          >
+            Sign up
+          </Text>
         </Text>
       </View>
     </KeyboardAvoidingView>
@@ -118,3 +155,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
+

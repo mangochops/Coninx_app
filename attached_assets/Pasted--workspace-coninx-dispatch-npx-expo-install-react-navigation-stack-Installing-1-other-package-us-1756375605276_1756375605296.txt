@@ -1,0 +1,74 @@
+~/workspace/coninx-dispatch$ npx expo install react-navigation/stack
+› Installing 1 other package using npm
+> npm install
+npm error code ERESOLVE
+npm error ERESOLVE unable to resolve dependency tree
+npm error
+npm error While resolving: coninx-dispatch@1.0.0
+npm error Found: react-native-gesture-handler@2.24.0
+npm error node_modules/react-native-gesture-handler
+npm error   react-native-gesture-handler@"~2.24.0" from the root project
+npm error
+npm error Could not resolve dependency:
+npm error peer react-native-gesture-handler@"^1.5.0" from undefined@2.1.1
+npm error node_modules/undefined
+npm error   undefined@"react-navigation/stack" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error /home/runner/.npm/_logs/2025-08-28T10_05_16_755Z-eresolve-report.txt
+npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2025-08-28T10_05_16_755Z-debug-0.log
+Error: npm install exited with non-zero code: 1
+Error: npm install exited with non-zero code: 1
+    at ChildProcess.completionListener (/home/runner/workspace/coninx-dispatch/node_modules/@expo/spawn-async/build/spawnAsync.js:42:23)
+    at Object.onceWrapper (node:events:639:26)
+    at ChildProcess.emit (node:events:524:28)
+    at maybeClose (node:internal/child_process:1104:16)
+    at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+    ...
+    at spawnAsync (/home/runner/workspace/coninx-dispatch/node_modules/@expo/spawn-async/build/spawnAsync.js:7:23)
+    at NpmPackageManager.runAsync (/home/runner/workspace/coninx-dispatch/node_modules/@expo/package-manager/build/node/BasePackageManager.js:41:42)
+    at /home/runner/workspace/coninx-dispatch/node_modules/@expo/package-manager/build/node/NpmPackageManager.js:36:20
+    at /home/runner/workspace/coninx-dispatch/node_modules/@expo/package-manager/build/utils/spawn.js:14:34
+~/workspace/coninx-dispatch$ npx expo install react-navigation
+› Installing 1 other package using npm
+> npm install --save react-navigation
+npm error code ERESOLVE
+npm error ERESOLVE unable to resolve dependency tree
+npm error
+npm error While resolving: coninx-dispatch@1.0.0
+npm error Found: react-native-gesture-handler@2.24.0
+npm error node_modules/react-native-gesture-handler
+npm error   react-native-gesture-handler@"~2.24.0" from the root project
+npm error
+npm error Could not resolve dependency:
+npm error peer react-native-gesture-handler@"^1.5.0" from undefined@2.1.1
+npm error node_modules/undefined
+npm error   undefined@"react-navigation/stack" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error /home/runner/.npm/_logs/2025-08-28T10_06_07_964Z-eresolve-report.txt
+npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2025-08-28T10_06_07_964Z-debug-0.log
+Error: npm install --save react-navigation exited with non-zero code: 1
+Error: npm install --save react-navigation exited with non-zero code: 1
+    at ChildProcess.completionListener (/home/runner/workspace/coninx-dispatch/node_modules/@expo/spawn-async/build/spawnAsync.js:42:23)
+    at Object.onceWrapper (node:events:639:26)
+    at ChildProcess.emit (node:events:524:28)
+    at maybeClose (node:internal/child_process:1104:16)
+    at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+    ...
+    at spawnAsync (/home/runner/workspace/coninx-dispatch/node_modules/@expo/spawn-async/build/spawnAsync.js:7:23)
+    at NpmPackageManager.runAsync (/home/runner/workspace/coninx-dispatch/node_modules/@expo/package-manager/build/node/BasePackageManager.js:41:42)
+    at /home/runner/workspace/coninx-dispatch/node_modules/@expo/package-manager/build/node/NpmPackageManager.js:37:20
+    at /home/runner/workspace/coninx-dispatch/node_modules/@expo/package-manager/build/utils/spawn.js:14:34
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+~/workspace/coninx-dispatch$ 
