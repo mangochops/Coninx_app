@@ -49,6 +49,12 @@
         "projectId": "bbaf9af4-468c-4630-963f-d23da372bc59"
       }
     },
-    "owner": "mangochops"
+    "owner": "mangochops",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/bbaf9af4-468c-4630-963f-d23da372bc59"
+    }
   }
 }
