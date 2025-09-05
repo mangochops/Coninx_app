@@ -90,10 +90,7 @@ export default function LoginScreen() {
 
         <Text style={styles.footerText}>
           Don’t have an account?{" "}
-          <Text
-            style={styles.link}
-            onPress={() => router.push("/signup")}
-          >
+          <Text style={styles.link} onPress={() => router.push("/signup")}>
             Sign up
           </Text>
         </Text>
@@ -115,10 +112,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 24,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    // ✅ Replaced shadow props with boxShadow
+    boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.1)",
+    elevation: 5, // still needed for Android shadows
   },
   title: {
     fontSize: 26,
@@ -160,6 +156,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
 
 
 

@@ -5,6 +5,7 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
+  Platform,
 } from "react-native";
 import { Bell, CheckCircle2, AlertTriangle, Clock } from "lucide-react-native";
 
@@ -96,10 +97,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    // ✅ Platform-specific shadows
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 3 },
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: "0px 3px 6px rgba(0,0,0,0.1)",
+      },
+    }),
   },
   icon: {
     width: 40,
@@ -128,6 +140,7 @@ const styles = StyleSheet.create({
     color: "#888",
   },
 });
+
 
 
 

@@ -55,7 +55,7 @@ export default function SignupScreen() {
       Alert.alert("Success", message, [
         {
           text: "OK",
-          onPress: () => router.replace("/login"), // ✅ go to login page
+          onPress: () => router.replace("/login"),
         },
       ]);
     } catch (error) {
@@ -150,10 +150,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 24,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    // ✅ Replaced deprecated shadow props with boxShadow
+    boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.1)",
+    elevation: 5, // still needed for Android
   },
   title: {
     fontSize: 26,
@@ -195,3 +194,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
