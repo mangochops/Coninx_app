@@ -12,12 +12,12 @@ import {
 import { router } from "expo-router";
 
 export default function LoginScreen() {
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [IDNumber, setIDNumber] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!phoneNumber || !password) {
+    if (!IDNumber || !password) {
       Alert.alert("Error", "Please fill in all fields.");
       return;
     }
@@ -65,8 +65,8 @@ export default function LoginScreen() {
           placeholder="Phone Number"
           placeholderTextColor="#999"
           keyboardType="phone-pad"
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
+          value={IDNumber}
+          onChangeText={setIDNumber}
         />
 
         <TextInput

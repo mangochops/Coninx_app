@@ -14,13 +14,13 @@ import { router } from "expo-router";
 export default function SignupScreen() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [IDNumber, setIDNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
-    if (!firstName || !lastName || !phoneNumber || !password || !confirmPassword) {
+    if (!firstName || !lastName || !IDNumber || !password || !confirmPassword) {
       Alert.alert("Error", "Please fill in all fields.");
       return;
     }
@@ -40,7 +40,7 @@ export default function SignupScreen() {
           body: JSON.stringify({
             firstName,
             lastName,
-            phoneNumber: parseInt(phoneNumber, 10),
+            IDNumber: parseInt(IDNumber, 10),
             password,
           }),
         }
@@ -91,11 +91,11 @@ export default function SignupScreen() {
 
         <TextInput
           style={styles.input}
-          placeholder="Phone Number"
+          placeholder="ID Number"
           placeholderTextColor="#999"
           keyboardType="phone-pad"
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
+          value={IDNumber}
+          onChangeText={setIDNumber}
         />
 
         <TextInput
