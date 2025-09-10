@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
 } from "react-native";
+import { useRouter } from "expo-router"; // ✅ for navigation
 
 export default function JobsScreen() {
   const [jobs, setJobs] = useState([
@@ -28,8 +29,9 @@ export default function JobsScreen() {
     },
   ]);
   const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
 
-  // Simulate refresh (fetch trips from API later)
+  // Simulate refresh (later replace with API call)
   const onRefresh = () => {
     setRefreshing(true);
     setTimeout(() => {
@@ -47,28 +49,40 @@ export default function JobsScreen() {
     }, 1500);
   };
 
-  const handleAccept = (id: string) => {
+  const handleStartTrip = (id: string) => {
     setJobs((prev) =>
       prev.map((job) =>
-        job.id === id ? { ...job, status: "Accepted" } : job
+        job.id === id ? { ...job, status: "Ongoing" } : job
       )
     );
-    Alert.alert("Trip Accepted", "You have accepted this trip.");
+    Alert.alert("Trip Started", "Trip is now ongoing.");
   };
 
-  const handleReject = (id: string) => {
-    setJobs((prev) => prev.filter((job) => job.id !== id));
-    Alert.alert("Trip Rejected", "You have rejected this trip.");
+  const handleComplete = (id: string) => {
+    setJobs((prev) =>
+      prev.map((job) =>
+        job.id === id ? { ...job, status: "Completed" } : job
+      )
+    );
+    Alert.alert("Trip Completed", "Delivery has been completed.");
+  };
+
+  const handleViewTrip = (job: any) => {
+    // Navigate to MapsScreen and pass job details
+    router.push({
+      pathname: "/map",
+      params: { id: job.id, pickup: job.pickup, dropoff: job.dropoff },
+    });
   };
 
   const renderJob = ({ item }: any) => (
     <View style={styles.card}>
       <View style={styles.row}>
-        <Text style={styles.label}>Pickup:</Text>
+        <Text style={styles.label}>Client:</Text>
         <Text style={styles.value}>{item.pickup}</Text>
       </View>
       <View style={styles.row}>
-        <Text style={styles.label}>Dropoff:</Text>
+        <Text style={styles.label}>Location:</Text>
         <Text style={styles.value}>{item.dropoff}</Text>
       </View>
       <View style={styles.row}>
@@ -79,27 +93,41 @@ export default function JobsScreen() {
       <Text
         style={[
           styles.status,
-          item.status === "Accepted" && { color: "#28a745" },
+          item.status === "Ongoing" && { color: "#FFC107" },
+          item.status === "Completed" && { color: "#28a745" },
         ]}
       >
         {item.status}
       </Text>
 
+      {/* Buttons */}
       {item.status === "Pending" && (
         <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.button, styles.accept]}
-            onPress={() => handleAccept(item.id)}
+            style={[styles.button, styles.start]}
+            onPress={() => handleStartTrip(item.id)}
             activeOpacity={0.8}
           >
-            <Text style={styles.buttonText}>Accept</Text>
+            <Text style={styles.buttonText}>Start</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.button, styles.reject]}
-            onPress={() => handleReject(item.id)}
+            style={[styles.button, styles.complete]}
+            onPress={() => handleComplete(item.id)}
             activeOpacity={0.8}
           >
-            <Text style={styles.buttonText}>Reject</Text>
+            <Text style={styles.buttonText}>Complete</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {item.status === "Ongoing" && (
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.button, styles.view]}
+            onPress={() => handleViewTrip(item)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.buttonText}>View Trip</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -108,7 +136,7 @@ export default function JobsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Pending Trips</Text>
+      <Text style={styles.header}>Trips</Text>
       <FlatList
         data={jobs}
         keyExtractor={(item) => item.id}
@@ -138,7 +166,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    // ✅ Platform-specific shadows
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -188,11 +215,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
   },
-  accept: {
-    backgroundColor: "#28a745",
+  start: {
+    backgroundColor: "#FFC107", // yellow
   },
-  reject: {
-    backgroundColor: "#dc3545",
+  complete: {
+    backgroundColor: "#dc3545", // red
+  },
+  view: {
+    backgroundColor: "#000", // matches your logo black
   },
   buttonText: {
     color: "#fff",
@@ -200,4 +230,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+
 
