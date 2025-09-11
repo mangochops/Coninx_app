@@ -30,7 +30,7 @@ export default function LoginScreen() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            phoneNumber: parseInt(phoneNumber, 10),
+            phoneNumber: parseInt(IDNumber, 10),
             password,
           }),
         }
@@ -62,7 +62,7 @@ export default function LoginScreen() {
 
         <TextInput
           style={styles.input}
-          placeholder="Phone Number"
+          placeholder="Identification Number"
           placeholderTextColor="#999"
           keyboardType="phone-pad"
           value={IDNumber}

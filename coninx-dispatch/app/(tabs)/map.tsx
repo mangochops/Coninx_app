@@ -6,8 +6,15 @@ import * as Location from "expo-location";
 export default function MapScreen() {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const webViewRef = useRef<WebView>(null);
+  const ws = useRef<WebSocket | null>(null);
 
-  // Get driver location
+  // API base URL from env
+  const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+
+  const WS_URL = `${BASE_URL.replace("https", "wss")}/ws/trips`;
+
+
+  // Send driver location to backend
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -15,6 +22,24 @@ export default function MapScreen() {
         console.warn("Permission to access location was denied");
         return;
       }
+
+      // Open WebSocket connection
+      ws.current = new WebSocket(WS_URL);
+
+      ws.current.onopen = () => {
+        console.log("Connected to WebSocket");
+      };
+
+      ws.current.onmessage = (event) => {
+        // Incoming: live locations of all drivers
+        if (webViewRef.current) {
+          webViewRef.current.postMessage(event.data); // forward to WebView
+        }
+      };
+
+      ws.current.onerror = (err) => {
+        console.error("WebSocket error:", err);
+      };
 
       // Watch location changes
       Location.watchPositionAsync(
@@ -30,13 +55,19 @@ export default function MapScreen() {
           };
           setLocation(coords);
 
-          // Send live location to WebView
-          if (webViewRef.current) {
-            webViewRef.current.postMessage(JSON.stringify(coords));
+          // Send location to backend
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({ driverId: "driver123", ...coords }));
           }
         }
       );
     })();
+
+    return () => {
+      if (ws.current) {
+        ws.current.close();
+      }
+    };
   }, []);
 
   const leafletHTML = `
@@ -56,30 +87,36 @@ export default function MapScreen() {
       <body>
         <div id="map"></div>
         <script>
-          var map = L.map('map').setView([0,0], 15);
-
+          var map = L.map('map').setView([0,0], 13);
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
           }).addTo(map);
 
-          var driverMarker = null;
+          var driverMarkers = {};
 
-          // Receive messages from React Native
+          // Handle incoming driver locations
           document.addEventListener("message", function(event) {
             var data = JSON.parse(event.data);
-            var lat = data.latitude;
-            var lng = data.longitude;
 
-            if (!driverMarker) {
-              driverMarker = L.marker([lat, lng]).addTo(map)
-                .bindPopup("Driver Location")
-                .openPopup();
-              map.setView([lat, lng], 15);
+            // If it's a list of drivers
+            if (Array.isArray(data)) {
+              data.forEach(function(driver) {
+                updateDriverMarker(driver.driverId, driver.latitude, driver.longitude);
+              });
             } else {
-              driverMarker.setLatLng([lat, lng]);
-              map.setView([lat, lng], map.getZoom());
+              // Single driver (fallback)
+              updateDriverMarker(data.driverId, data.latitude, data.longitude);
             }
           });
+
+          function updateDriverMarker(driverId, lat, lng) {
+            if (!driverMarkers[driverId]) {
+              driverMarkers[driverId] = L.marker([lat, lng]).addTo(map)
+                .bindPopup("Driver: " + driverId);
+            } else {
+              driverMarkers[driverId].setLatLng([lat, lng]);
+            }
+          }
         </script>
       </body>
     </html>
@@ -106,3 +143,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+
