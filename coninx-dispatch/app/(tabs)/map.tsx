@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from "react";
 import { View, StyleSheet, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
@@ -8,10 +9,17 @@ export default function MapScreen() {
   const webViewRef = useRef<WebView>(null);
   const ws = useRef<WebSocket | null>(null);
 
-  // API base URL from env
-  const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-
-  const WS_URL = `${BASE_URL.replace("https", "wss")}/ws/trips`;
+  // Send location to WebView to center the map
+  useEffect(() => {
+    if (location && webViewRef.current) {
+      webViewRef.current.postMessage(
+        JSON.stringify({ center: location })
+      );
+    }
+  }, [location]);
+  // Replace this with your actual WebSocket base URL, e.g., 'example.com'
+    const wsBase = "your.websocket.base.url";
+    const WS_URL = `wss://${wsBase}/ws/admin/trips`;
 
 
   // Send driver location to backend
@@ -24,6 +32,7 @@ export default function MapScreen() {
       }
 
       // Open WebSocket connection
+
       ws.current = new WebSocket(WS_URL);
 
       ws.current.onopen = () => {
@@ -37,8 +46,12 @@ export default function MapScreen() {
         }
       };
 
-      ws.current.onerror = (err) => {
-        console.error("WebSocket error:", err);
+      ws.current.onerror = (event) => {
+        // WebSocket onerror provides an Event, not an Error object
+        console.error("WebSocket error event:", event);
+        console.error(
+          "WebSocket failed to connect: Backend may not support WebSocket upgrades or endpoint is incorrect. Check backend deployment and ws endpoint."
+        );
       };
 
       // Watch location changes
@@ -94,9 +107,15 @@ export default function MapScreen() {
 
           var driverMarkers = {};
 
-          // Handle incoming driver locations
+
+          // Handle incoming driver locations and center updates
           document.addEventListener("message", function(event) {
             var data = JSON.parse(event.data);
+
+            if (data.center) {
+              map.setView([data.center.latitude, data.center.longitude], 13);
+              return;
+            }
 
             // If it's a list of drivers
             if (Array.isArray(data)) {
@@ -124,15 +143,16 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      {!location ? (
-        <ActivityIndicator size="large" color="#fbbf24" style={{ flex: 1 }} />
-      ) : (
-        <WebView
-          ref={webViewRef}
-          originWhitelist={["*"]}
-          source={{ html: leafletHTML }}
-          style={{ flex: 1 }}
-        />
+      <WebView
+        ref={webViewRef}
+        originWhitelist={["*"]}
+        source={{ html: leafletHTML }}
+        style={{ flex: 1 }}
+      />
+      {!location && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fbbf24" />
+        </View>
       )}
     </View>
   );
@@ -141,6 +161,13 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
 });
 
