@@ -27,7 +27,7 @@ export default function JobsScreen() {
   // Fetch jobs from backend
   const fetchJobs = async () => {
     try {
-      const res = await fetch(`${BASE_URL}/dispatch`);
+      const res = await fetch(`${BASE_URL}/admin/dispatch`);
       if (!res.ok) throw new Error("Failed to fetch jobs");
       const data = await res.json();
       setJobs(data);
@@ -60,7 +60,7 @@ export default function JobsScreen() {
   // Step 1 → Ask backend to send OTP
   const handleComplete = async (job: any) => {
     try {
-      const res = await fetch(`${BASE_URL}/dispatch/${job.id}/send-otp`, {
+      const res = await fetch(`${BASE_URL}/admin/dispatch/${job.id}/send-otp`, {
         method: "POST",
       });
       if (!res.ok) throw new Error("Failed to send OTP");
@@ -75,7 +75,7 @@ export default function JobsScreen() {
   const verifyOtp = async () => {
     if (!currentJob) return;
     try {
-      const res = await fetch(`${BASE_URL}/dispatch/${currentJob.id}/verify-otp`, {
+      const res = await fetch(`${BASE_URL}/admin/dispatch/${currentJob.id}/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
