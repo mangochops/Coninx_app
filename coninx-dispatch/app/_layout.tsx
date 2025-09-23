@@ -1,7 +1,7 @@
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
@@ -14,11 +14,14 @@ export default function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
   const router = useRouter();
+  const segments = useSegments();
 
-  useEffect(() => {
-    // Redirect to /signup on app load
-    router.replace('/signup');
-  }, []);
+  // useEffect(() => {
+  //   // Only redirect if at root or (tabs) route
+  //   if (segments.length === 1 && segments[0] === '(tabs)') {
+  //     router.replace('/signup');
+  //   }
+  // }, [segments]);
 
   if (!loaded) {
     // Async font loading only occurs in development.
