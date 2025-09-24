@@ -16,12 +16,14 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
 
-  // useEffect(() => {
-  //   // Only redirect if at root or (tabs) route
-  //   if (segments.length === 1 && segments[0] === '(tabs)') {
-  //     router.replace('/signup');
-  //   }
-  // }, [segments]);
+  useEffect(() => {
+    // Redirect to /signup if at root or (tabs) and not already on /signup
+    if (
+      segments.length === 1 && segments[0] === '(tabs)'
+    ) {
+      router.replace('/signup');
+    }
+  }, [segments]);
 
   if (!loaded) {
     // Async font loading only occurs in development.

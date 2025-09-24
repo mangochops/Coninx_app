@@ -24,10 +24,10 @@ export default function JobsScreen() {
   // API base URL from env
   const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
-  // Fetch jobs from backend
+  // Fetch jobs from backend (updated endpoint and fields)
   const fetchJobs = async () => {
     try {
-      const res = await fetch(`${BASE_URL}/admin/dispatch`);
+      const res = await fetch(`${BASE_URL}/admin/dispatches`);
       if (!res.ok) throw new Error("Failed to fetch jobs");
       const data = await res.json();
       setJobs(data);
@@ -57,10 +57,10 @@ export default function JobsScreen() {
     Alert.alert("Trip Started", "Trip is now ongoing.");
   };
 
-  // Step 1 → Ask backend to send OTP
+  // Step 1 → Ask backend to send OTP (updated endpoint)
   const handleComplete = async (job: any) => {
     try {
-      const res = await fetch(`${BASE_URL}/admin/dispatch/${job.id}/send-otp`, {
+      const res = await fetch(`${BASE_URL}/admin/dispatches/${job.id}/send-otp`, {
         method: "POST",
       });
       if (!res.ok) throw new Error("Failed to send OTP");
@@ -71,11 +71,11 @@ export default function JobsScreen() {
     }
   };
 
-  // Step 2 → Verify OTP
+  // Step 2 → Verify OTP (updated endpoint)
   const verifyOtp = async () => {
     if (!currentJob) return;
     try {
-      const res = await fetch(`${BASE_URL}/admin/dispatch/${currentJob.id}/verify-otp`, {
+      const res = await fetch(`${BASE_URL}/admin/dispatches/${currentJob.id}/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
@@ -102,20 +102,20 @@ export default function JobsScreen() {
     });
   };
 
-  // Render job card
+  // Render job card (updated fields)
   const renderJob = ({ item }: any) => (
     <View style={styles.card}>
       <View style={styles.row}>
         <Text style={styles.label}>Client:</Text>
-        <Text style={styles.value}>{item.recepient || item.pickup}</Text>
+        <Text style={styles.value}>{item.recipient || item.driver?.firstName || "-"}</Text>
       </View>
       <View style={styles.row}>
         <Text style={styles.label}>Location:</Text>
-        <Text style={styles.value}>{item.location || item.dropoff}</Text>
+        <Text style={styles.value}>{item.location || "-"}</Text>
       </View>
       <View style={styles.row}>
         <Text style={styles.label}>Fare:</Text>
-        <Text style={styles.fare}>{item.fare || `Ksh ${item.invoice}`}</Text>
+        <Text style={styles.fare}>{item.invoice ? `Ksh ${item.invoice}` : "-"}</Text>
       </View>
 
       <Text

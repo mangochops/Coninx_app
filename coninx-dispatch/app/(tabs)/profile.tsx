@@ -1,19 +1,61 @@
-import React from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView } from "react-native";
+
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from "react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, Phone, Mail, Star, LogOut, Settings, Edit } from "lucide-react-native";
 
+
+
 export default function ProfileScreen() {
+  const [driver, setDriver] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDriver = async () => {
+      try {
+        const id = await AsyncStorage.getItem('driverId');
+        if (!id) {
+          Alert.alert('Error', 'No driver ID found. Please log in again.');
+          setLoading(false);
+          return;
+        }
+        const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+        const res = await fetch(`${BASE_URL}/admin/drivers/${id}`);
+        if (!res.ok) throw new Error('Failed to fetch driver details');
+        const data = await res.json();
+        setDriver(data);
+      } catch (err) {
+        Alert.alert('Error', String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDriver();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
+  if (!driver) {
+    return null;
+  }
+
   return (
     <ScrollView style={styles.container}>
       {/* Profile Header */}
       <View style={styles.header}>
         <Image
           source={{
-            uri: "https://randomuser.me/api/portraits/men/32.jpg", // replace with driver's photo
+            uri: driver.photoUrl || "https://randomuser.me/api/portraits/men/32.jpg",
           }}
           style={styles.avatar}
         />
-        <Text style={styles.name}>John Doe</Text>
+        <Text style={styles.name}>{driver.firstName} {driver.lastName}</Text>
         <Text style={styles.role}>Delivery Driver</Text>
       </View>
 
@@ -21,31 +63,31 @@ export default function ProfileScreen() {
       <View style={styles.infoCard}>
         <View style={styles.row}>
           <User size={20} color="#2563eb" />
-          <Text style={styles.infoText}>License ID: DRV-12345</Text>
+          <Text style={styles.infoText}>License ID: {driver.licenseId || 'N/A'}</Text>
         </View>
         <View style={styles.row}>
           <Phone size={20} color="#16a34a" />
-          <Text style={styles.infoText}>+254 712 345 678</Text>
+          <Text style={styles.infoText}>{driver.phone || 'N/A'}</Text>
         </View>
         <View style={styles.row}>
           <Mail size={20} color="#f59e0b" />
-          <Text style={styles.infoText}>johndoe@email.com</Text>
+          <Text style={styles.infoText}>{driver.email || 'N/A'}</Text>
         </View>
       </View>
 
       {/* Stats Section */}
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>
-          <Text style={styles.statNumber}>152</Text>
+          <Text style={styles.statNumber}>{driver.tripsCount ?? 0}</Text>
           <Text style={styles.statLabel}>Trips</Text>
         </View>
         <View style={styles.statBox}>
           <Star size={18} color="#facc15" />
-          <Text style={styles.statNumber}>4.8</Text>
+          <Text style={styles.statNumber}>{driver.rating ?? 'N/A'}</Text>
           <Text style={styles.statLabel}>Rating</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statNumber}>3</Text>
+          <Text style={styles.statNumber}>{driver.yearsExperience ?? 0}</Text>
           <Text style={styles.statLabel}>Years</Text>
         </View>
       </View>
