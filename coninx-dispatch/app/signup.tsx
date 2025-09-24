@@ -18,6 +18,8 @@ export default function SignupScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSignup = async () => {
     if (!firstName || !lastName || !IDNumber || !password || !confirmPassword) {
@@ -55,7 +57,7 @@ export default function SignupScreen() {
       Alert.alert("Success", message, [
         {
           text: "OK",
-          onPress: () => router.replace("/login"),
+          onPress: () => router.replace("/(tabs)"),
         },
       ]);
     } catch (error) {
@@ -98,23 +100,46 @@ export default function SignupScreen() {
           onChangeText={setIDNumber}
         />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#999"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Confirm Password"
-          placeholderTextColor="#999"
-          secureTextEntry
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-        />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="Password"
+            placeholderTextColor="#999"
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+          />
+          <TouchableOpacity
+            onPress={() => setShowPassword((prev) => !prev)}
+            style={styles.eyeButton}
+            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+          >
+            <Text style={{ fontSize: 18, color: '#999' }}>
+              {showPassword ? '🙈' : '👁️'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="Confirm Password"
+            placeholderTextColor="#999"
+            secureTextEntry={!showConfirmPassword}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+          />
+          <TouchableOpacity
+            onPress={() => setShowConfirmPassword((prev) => !prev)}
+            style={styles.eyeButton}
+            accessibilityLabel={showConfirmPassword ? "Hide password" : "Show password"}
+          >
+            <Text style={{ fontSize: 18, color: '#999' }}>
+              {showConfirmPassword ? '🙈' : '👁️'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity
           style={styles.button}
@@ -170,6 +195,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     fontSize: 16,
     backgroundColor: "#fafafa",
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  eyeButton: {
+    padding: 8,
+    marginLeft: -40,
+    zIndex: 1,
   },
   button: {
     backgroundColor: "#eec332",

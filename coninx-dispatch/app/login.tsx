@@ -11,10 +11,12 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 
+
 export default function LoginScreen() {
   const [IDNumber, setIDNumber] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!IDNumber || !password) {
@@ -69,14 +71,26 @@ export default function LoginScreen() {
           onChangeText={setIDNumber}
         />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#999"
-          secureTextEntry={true}
-          value={password}
-          onChangeText={setPassword}
-        />
+
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="Password"
+            placeholderTextColor="#999"
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+          />
+          <TouchableOpacity
+            onPress={() => setShowPassword((prev) => !prev)}
+            style={styles.eyeButton}
+            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+          >
+            <Text style={{ fontSize: 18, color: '#999' }}>
+              {showPassword ? '🙈' : '👁️'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity
           style={styles.button}
@@ -132,6 +146,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     fontSize: 16,
     backgroundColor: "#fafafa",
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  eyeButton: {
+    padding: 8,
+    marginLeft: -40,
+    zIndex: 1,
   },
   button: {
     backgroundColor: "#eec332",
