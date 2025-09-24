@@ -42,7 +42,7 @@ export default function HomeScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={[styles.tripItem, styles.shadow]}>
-            <Ionicons name="location-outline" size={22} color="#2563eb" />
+            <Ionicons name="location-outline" size={22} color="#eec332" />
             <View style={{ marginLeft: 10 }}>
               <Text style={styles.tripText}>
                 {item.from} → {item.to}
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   startButton: {
     marginTop: 14,
-    backgroundColor: "#2563eb",
+    backgroundColor: "#eec332",
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
