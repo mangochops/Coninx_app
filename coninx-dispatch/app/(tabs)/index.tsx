@@ -1,13 +1,99 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Platform } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  Platform,
+  ActivityIndicator,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import EventSource, { MessageEvent } from "react-native-sse";
+
+// ✅ Define types
+interface Dispatch {
+  id: number;
+  location: string;
+  recipient: string;
+  invoice: string;
+}
+
+interface Trip {
+  id: number;
+  dispatch_id: number;
+  destination?: string;
+  status: "pending" | "in_progress" | "completed" | string;
+}
 
 export default function HomeScreen() {
-  const recentTrips = [
-    { id: "1", from: "Warehouse A", to: "Client B", status: "Completed" },
-    { id: "2", from: "Warehouse C", to: "Client D", status: "Completed" },
-    { id: "3", from: "Warehouse A", to: "Client E", status: "In Progress" },
-  ];
+  const [dispatches, setDispatches] = useState<Dispatch[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const API_URL = "https://coninx-backend.onrender.com";
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [dispatchRes, tripRes] = await Promise.all([
+          fetch(`${API_URL}/admin/dispatches`),
+          fetch(`${API_URL}/admin/trips`),
+        ]);
+        const dispatchData: Dispatch[] = await dispatchRes.json();
+        const tripData: Trip[] = await tripRes.json();
+        setDispatches(dispatchData);
+        setTrips(tripData);
+      } catch (err) {
+        console.error("Error fetching data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+
+    // 🔴 Hook into SSE for live trip updates
+    const es = new EventSource(`${API_URL}/admin/trips/stream`);
+
+    es.addEventListener("message", (event: MessageEvent) => {
+      if (!event.data) return; // ✅ Ensure it's not null
+      try {
+        const updatedTrip: Trip = JSON.parse(event.data);
+        setTrips((prev) => {
+          const exists = prev.find((t) => t.id === updatedTrip.id);
+          if (exists) {
+            // Update existing trip
+            return prev.map((t) => (t.id === updatedTrip.id ? updatedTrip : t));
+          } else {
+            // Append new trip
+            return [updatedTrip, ...prev];
+          }
+        });
+      } catch (err) {
+        console.error("Error parsing SSE data:", err);
+      }
+    });
+
+    es.addEventListener("error", (err) => {
+      console.error("SSE error:", err);
+    });
+
+    return () => {
+      es.close(); // cleanup when component unmounts
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color="#2563eb" />
+        <Text>Loading your dashboard...</Text>
+      </View>
+    );
+  }
+
+  const nextDispatch = dispatches.length > 0 ? dispatches[0] : null;
 
   return (
     <View style={styles.container}>
@@ -20,37 +106,41 @@ export default function HomeScreen() {
         <Ionicons name="car-outline" size={28} color="#2563eb" />
         <View style={{ marginLeft: 12 }}>
           <Text style={styles.cardTitle}>Status: Online</Text>
-          <Text style={styles.cardSubtitle}>2 trips assigned today</Text>
+          <Text style={styles.cardSubtitle}>{trips.length} trips assigned today</Text>
         </View>
       </View>
 
       {/* Next Assignment */}
-      <View style={[styles.assignmentCard, styles.shadow]}>
-        <Text style={styles.sectionTitle}>Next Dispatch</Text>
-        <Text style={styles.assignmentText}>📍 Dropoff: Dagoreti Corner</Text>
-        <Text style={styles.assignmentText}>👤 Client: Mbugua Kamau</Text>
-        <Text style={styles.assignmentText}>🧾 Invoice No.: INV 003</Text>
-        <TouchableOpacity style={styles.startButton}>
-          <Text style={styles.startButtonText}>Start Trip</Text>
-        </TouchableOpacity>
-      </View>
+      {nextDispatch ? (
+        <View style={[styles.assignmentCard, styles.shadow]}>
+          <Text style={styles.sectionTitle}>Next Dispatch</Text>
+          <Text style={styles.assignmentText}>📍 Dropoff: {nextDispatch.location}</Text>
+          <Text style={styles.assignmentText}>👤 Client: {nextDispatch.recipient}</Text>
+          <Text style={styles.assignmentText}>🧾 Invoice No.: INV {nextDispatch.invoice}</Text>
+          <TouchableOpacity style={styles.startButton}>
+            <Text style={styles.startButtonText}>Start Trip</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <Text style={styles.noDispatch}>No upcoming dispatches</Text>
+      )}
 
       {/* Recent Trips */}
       <Text style={styles.sectionTitle}>Recent Trips</Text>
       <FlatList
-        data={recentTrips}
-        keyExtractor={(item) => item.id}
+        data={trips}
+        keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <View style={[styles.tripItem, styles.shadow]}>
             <Ionicons name="location-outline" size={22} color="#eec332" />
             <View style={{ marginLeft: 10 }}>
               <Text style={styles.tripText}>
-                {item.from} → {item.to}
+                Dispatch #{item.dispatch_id} → {item.destination || "Unknown"}
               </Text>
               <Text
                 style={[
                   styles.tripStatus,
-                  item.status === "Completed"
+                  item.status === "completed"
                     ? { color: "#16a34a" }
                     : { color: "#f97316" },
                 ]}
@@ -145,7 +235,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  // ✅ Cross-platform shadow fix
+  noDispatch: {
+    fontSize: 14,
+    color: "#6b7280",
+    marginBottom: 25,
+  },
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   shadow: {
     ...Platform.select({
       ios: {
@@ -160,11 +259,4 @@ const styles = StyleSheet.create({
     }),
   },
 });
-
-
-
-
-
-
-
 

@@ -15,6 +15,7 @@ export default function SignupScreen() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [IDNumber, setIDNumber] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState(""); // ✅ New state
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,7 +23,7 @@ export default function SignupScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSignup = async () => {
-    if (!firstName || !lastName || !IDNumber || !password || !confirmPassword) {
+    if (!firstName || !lastName || !IDNumber || !phoneNumber || !password || !confirmPassword) {
       Alert.alert("Error", "Please fill in all fields.");
       return;
     }
@@ -43,6 +44,7 @@ export default function SignupScreen() {
             firstName,
             lastName,
             IDNumber: parseInt(IDNumber, 10),
+            phoneNumber, // ✅ include phone number
             password,
           }),
         }
@@ -95,11 +97,20 @@ export default function SignupScreen() {
           style={styles.input}
           placeholder="ID Number"
           placeholderTextColor="#999"
-          keyboardType="phone-pad"
+          keyboardType="numeric"
           value={IDNumber}
           onChangeText={setIDNumber}
         />
 
+        {/* ✅ Phone Number Input */}
+        <TextInput
+          style={styles.input}
+          placeholder="Phone Number"
+          placeholderTextColor="#999"
+          keyboardType="phone-pad"
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+        />
 
         <View style={styles.passwordContainer}>
           <TextInput
@@ -113,7 +124,6 @@ export default function SignupScreen() {
           <TouchableOpacity
             onPress={() => setShowPassword((prev) => !prev)}
             style={styles.eyeButton}
-            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
           >
             <Text style={{ fontSize: 18, color: '#999' }}>
               {showPassword ? '🙈' : '👁️'}
@@ -133,7 +143,6 @@ export default function SignupScreen() {
           <TouchableOpacity
             onPress={() => setShowConfirmPassword((prev) => !prev)}
             style={styles.eyeButton}
-            accessibilityLabel={showConfirmPassword ? "Hide password" : "Show password"}
           >
             <Text style={{ fontSize: 18, color: '#999' }}>
               {showConfirmPassword ? '🙈' : '👁️'}
@@ -175,9 +184,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 24,
-    // ✅ Replaced deprecated shadow props with boxShadow
-    boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.1)",
-    elevation: 5, // still needed for Android
+    elevation: 5,
   },
   title: {
     fontSize: 26,
@@ -229,4 +236,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
 

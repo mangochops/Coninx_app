@@ -1,48 +1,65 @@
-
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from "react-native";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, Phone, Mail, Star, LogOut, Settings, Edit } from "lucide-react-native";
-
-
+import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator, Alert, FlatList } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { User, Phone, Star } from "lucide-react-native";
 
 export default function ProfileScreen() {
   const [driver, setDriver] = useState<any>(null);
+  const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchDriver = async () => {
+    const fetchDriverAndTrips = async () => {
       try {
-        const id = await AsyncStorage.getItem('driverId');
-        if (!id) {
-          Alert.alert('Error', 'No driver ID found. Please log in again.');
+        const phoneNumber = await AsyncStorage.getItem("phoneNumber"); // store this at login
+        if (!phoneNumber) {
+          Alert.alert("Error", "No phone number found. Please log in again.");
           setLoading(false);
           return;
         }
+
         const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-        const res = await fetch(`${BASE_URL}/admin/drivers/${id}`);
-        if (!res.ok) throw new Error('Failed to fetch driver details');
-        const data = await res.json();
-        setDriver(data);
+
+        // Fetch driver
+        const resDriver = await fetch(`${BASE_URL}/driver/all/${phoneNumber}`);
+        if (!resDriver.ok) throw new Error("Failed to fetch driver details");
+        const driverData = await resDriver.json();
+        setDriver(driverData);
+
+        // Fetch trips
+        const resTrips = await fetch(`${BASE_URL}/admin/trips`);
+        if (!resTrips.ok) throw new Error("Failed to fetch trips");
+        const allTrips = await resTrips.json();
+
+        // Filter trips for this driver (match by phoneNumber)
+        const driverTrips = allTrips.filter(
+          (trip: any) => trip.driver?.phoneNumber === phoneNumber
+        );
+        setTrips(driverTrips);
       } catch (err) {
-        Alert.alert('Error', String(err));
+        Alert.alert("Error", String(err));
       } finally {
         setLoading(false);
       }
     };
-    fetchDriver();
+
+    fetchDriverAndTrips();
   }, []);
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color="#2563eb" />
       </View>
     );
   }
 
   if (!driver) {
-    return null;
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>No driver found</Text>
+      </View>
+    );
   }
 
   return (
@@ -50,9 +67,7 @@ export default function ProfileScreen() {
       {/* Profile Header */}
       <View style={styles.header}>
         <Image
-          source={{
-            uri: driver.photoUrl || "https://randomuser.me/api/portraits/men/32.jpg",
-          }}
+          source={{ uri: "https://randomuser.me/api/portraits/men/32.jpg" }}
           style={styles.avatar}
         />
         <Text style={styles.name}>{driver.firstName} {driver.lastName}</Text>
@@ -62,62 +77,36 @@ export default function ProfileScreen() {
       {/* Driver Info */}
       <View style={styles.infoCard}>
         <View style={styles.row}>
-          <User size={20} color="#2563eb" />
-          <Text style={styles.infoText}>License ID: {driver.licenseId || 'N/A'}</Text>
-        </View>
-        <View style={styles.row}>
-          <Phone size={20} color="#16a34a" />
-          <Text style={styles.infoText}>{driver.phone || 'N/A'}</Text>
-        </View>
-        <View style={styles.row}>
-          <Mail size={20} color="#f59e0b" />
-          <Text style={styles.infoText}>{driver.email || 'N/A'}</Text>
+          <Phone size={20} color="#2563eb" />
+          <Text style={styles.infoText}>Phone: {driver.phoneNumber}</Text>
         </View>
       </View>
 
-      {/* Stats Section */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statBox}>
-          <Text style={styles.statNumber}>{driver.tripsCount ?? 0}</Text>
-          <Text style={styles.statLabel}>Trips</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Star size={18} color="#facc15" />
-          <Text style={styles.statNumber}>{driver.rating ?? 'N/A'}</Text>
-          <Text style={styles.statLabel}>Rating</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statNumber}>{driver.yearsExperience ?? 0}</Text>
-          <Text style={styles.statLabel}>Years</Text>
-        </View>
-      </View>
-
-      {/* Action Buttons */}
-      <View style={styles.actions}>
-        <TouchableOpacity style={[styles.button, styles.edit]}>
-          <Edit size={18} color="#fff" />
-          <Text style={styles.buttonText}>Edit Profile</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.button, styles.settings]}>
-          <Settings size={18} color="#fff" />
-          <Text style={styles.buttonText}>Settings</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.button, styles.logout]}>
-          <LogOut size={18} color="#fff" />
-          <Text style={styles.buttonText}>Logout</Text>
-        </TouchableOpacity>
+      {/* Trips Section */}
+      <View style={styles.tripsCard}>
+        <Text style={styles.sectionTitle}>My Trips</Text>
+        {trips.length === 0 ? (
+          <Text style={styles.noTrips}>No active trips found.</Text>
+        ) : (
+          <FlatList
+            data={trips}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+              <View style={styles.tripItem}>
+                <Text style={styles.tripText}>Destination: {item.destination || "N/A"}</Text>
+                <Text style={styles.tripText}>Recipient: {item.recipient_name || "N/A"}</Text>
+                <Text style={styles.tripStatus}>Status: {item.status}</Text>
+              </View>
+            )}
+          />
+        )}
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
+  container: { flex: 1, backgroundColor: "#f8f9fa" },
   header: {
     alignItems: "center",
     paddingVertical: 30,
@@ -126,85 +115,26 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 20,
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: "#fff",
-    marginBottom: 10,
+    width: 100, height: 100, borderRadius: 50,
+    borderWidth: 3, borderColor: "#fff", marginBottom: 10,
   },
-  name: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  role: {
-    fontSize: 14,
-    color: "#e5e7eb",
-  },
+  name: { fontSize: 22, fontWeight: "bold", color: "#fff" },
+  role: { fontSize: 14, color: "#e5e7eb" },
   infoCard: {
-    backgroundColor: "#fff",
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 3,
+    backgroundColor: "#fff", margin: 16, padding: 16,
+    borderRadius: 12, elevation: 3,
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
+  row: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  infoText: { marginLeft: 10, fontSize: 15, color: "#333" },
+  tripsCard: {
+    backgroundColor: "#fff", margin: 16, padding: 16,
+    borderRadius: 12, elevation: 3,
   },
-  infoText: {
-    marginLeft: 10,
-    fontSize: 15,
-    color: "#333",
+  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
+  noTrips: { fontSize: 14, color: "#555" },
+  tripItem: {
+    borderBottomWidth: 1, borderBottomColor: "#eee", paddingVertical: 10,
   },
-  statsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 3,
-  },
-  statBox: {
-    alignItems: "center",
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#2563eb",
-  },
-  statLabel: {
-    fontSize: 13,
-    color: "#555",
-    marginTop: 4,
-  },
-  actions: {
-    marginTop: 20,
-    paddingHorizontal: 16,
-  },
-  button: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 12,
-    justifyContent: "center",
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "600",
-    marginLeft: 8,
-  },
-  edit: {
-    backgroundColor: "#2563eb",
-  },
-  settings: {
-    backgroundColor: "#16a34a",
-  },
-  logout: {
-    backgroundColor: "#dc2626",
-  },
+  tripText: { fontSize: 14, color: "#333" },
+  tripStatus: { fontSize: 13, fontWeight: "bold", color: "#2563eb", marginTop: 4 },
 });

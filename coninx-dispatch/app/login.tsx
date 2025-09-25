@@ -11,15 +11,14 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 
-
 export default function LoginScreen() {
-  const [IDNumber, setIDNumber] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
-    if (!IDNumber || !password) {
+    if (!phoneNumber || !password) {
       Alert.alert("Error", "Please fill in all fields.");
       return;
     }
@@ -32,20 +31,21 @@ export default function LoginScreen() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            phoneNumber: parseInt(IDNumber, 10),
+            phoneNumber, // ✅ use phoneNumber instead of ID
             password,
           }),
         }
       );
 
       if (!response.ok) {
-        throw new Error("Invalid credentials");
+        const errorText = await response.text();
+        throw new Error(errorText || "Invalid credentials");
       }
 
       const data = await response.text(); // backend returns plain text
       Alert.alert("Success", data);
 
-      // 🚀 Go to the tab layout (Home is index.tsx inside /app/(tabs)/ )
+      // 🚀 Go to tab layout (Home is index.tsx inside /app/(tabs)/ )
       router.replace("/(tabs)");
     } catch (err) {
       Alert.alert("Login failed", (err as Error).message);
@@ -64,13 +64,12 @@ export default function LoginScreen() {
 
         <TextInput
           style={styles.input}
-          placeholder="Identification Number"
+          placeholder="Phone Number"
           placeholderTextColor="#999"
           keyboardType="phone-pad"
-          value={IDNumber}
-          onChangeText={setIDNumber}
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
         />
-
 
         <View style={styles.passwordContainer}>
           <TextInput
@@ -86,8 +85,8 @@ export default function LoginScreen() {
             style={styles.eyeButton}
             accessibilityLabel={showPassword ? "Hide password" : "Show password"}
           >
-            <Text style={{ fontSize: 18, color: '#999' }}>
-              {showPassword ? '🙈' : '👁️'}
+            <Text style={{ fontSize: 18, color: "#999" }}>
+              {showPassword ? "🙈" : "👁️"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -126,9 +125,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 24,
-    // ✅ Replaced shadow props with boxShadow
     boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.1)",
-    elevation: 5, // still needed for Android shadows
+    elevation: 5,
   },
   title: {
     fontSize: 26,
@@ -148,8 +146,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fafafa",
   },
   passwordContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 15,
   },
   eyeButton: {
@@ -180,6 +178,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
 
 
 
