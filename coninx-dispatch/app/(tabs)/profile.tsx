@@ -21,7 +21,7 @@ export default function ProfileScreen() {
         const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
         // Fetch driver
-        const resDriver = await fetch(`${BASE_URL}/driver/all/${phoneNumber}`);
+        const resDriver = await fetch(`${BASE_URL}/driver/${phoneNumber}`);
         if (!resDriver.ok) throw new Error("Failed to fetch driver details");
         const driverData = await resDriver.json();
         setDriver(driverData);
