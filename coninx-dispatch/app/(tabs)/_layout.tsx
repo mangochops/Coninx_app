@@ -27,8 +27,8 @@ export default function TabLayout() {
         }),
       }}
     >
-      {/* 🏠 Home */}
-      <Tabs.Screen
+      {/*🏠 Home */}
+      {/* <Tabs.Screen
         name="index"
         options={{
           title: "Home",
@@ -36,7 +36,7 @@ export default function TabLayout() {
             <IconSymbol size={26} name="house.fill" color={color} />
           ),
         }}
-      />
+      />  */}
 
       {/* 📦 Jobs */}
       <Tabs.Screen

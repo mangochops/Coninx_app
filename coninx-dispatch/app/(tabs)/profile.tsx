@@ -11,9 +11,9 @@ export default function ProfileScreen() {
   useEffect(() => {
     const fetchDriverAndTrips = async () => {
       try {
-        const phoneNumber = await AsyncStorage.getItem("phoneNumber"); // store this at login
-        if (!phoneNumber) {
-          Alert.alert("Error", "No phone number found. Please log in again.");
+        const idNumber = await AsyncStorage.getItem("idNumber"); // store this at login
+        if (!idNumber) {
+          Alert.alert("Error", "No ID number found. Please log in again.");
           setLoading(false);
           return;
         }
@@ -21,7 +21,7 @@ export default function ProfileScreen() {
         const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
         // Fetch driver
-        const resDriver = await fetch(`${BASE_URL}/driver/${phoneNumber}`);
+        const resDriver = await fetch(`${BASE_URL}/driver/${idNumber}`);
         if (!resDriver.ok) throw new Error("Failed to fetch driver details");
         const driverData = await resDriver.json();
         setDriver(driverData);
@@ -31,9 +31,9 @@ export default function ProfileScreen() {
         if (!resTrips.ok) throw new Error("Failed to fetch trips");
         const allTrips = await resTrips.json();
 
-        // Filter trips for this driver (match by phoneNumber)
+        // Filter trips for this driver (match by idNumber)
         const driverTrips = allTrips.filter(
-          (trip: any) => trip.driver?.phoneNumber === phoneNumber
+          (trip: any) => trip.driver?.idNumber === idNumber
         );
         setTrips(driverTrips);
       } catch (err) {
