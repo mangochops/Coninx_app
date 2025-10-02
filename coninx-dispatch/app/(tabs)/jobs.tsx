@@ -1,248 +1,240 @@
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-  Platform,
-  TextInput,
-  Modal,
-} from "react-native";
-import { useRouter } from "expo-router";
+import React, { useEffect, useState, useRef } from "react";
+import { View, StyleSheet, ActivityIndicator, Alert } from "react-native";
+import { WebView } from "react-native-webview";
+import * as Location from "expo-location";
+import { useLocalSearchParams } from "expo-router";
 
-export default function JobsScreen() {
-  const [jobs, setJobs] = useState<any[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [otpModal, setOtpModal] = useState(false);
-  const [currentJob, setCurrentJob] = useState<any>(null);
-  const [code, setCode] = useState("");
-  const router = useRouter();
+export default function MapScreen() {
+  const { id } = useLocalSearchParams();
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [destination, setDestination] = useState<{ lat: number; lon: number; name: string } | null>(null);
+  const [distance, setDistance] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const webViewRef = useRef<WebView>(null);
 
-  // API base URL from env
-  const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+  const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://coninx-backend.onrender.com";
 
-  // Fetch jobs from backend (updated endpoint and fields)
-  const fetchJobs = async () => {
+  // Haversine formula to calculate distance in km
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Fetch dispatch details and geocode destination
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fetchDispatchAndGeocode = async (dispatchId: string) => {
     try {
-      const res = await fetch(`${BASE_URL}/admin/dispatches`);
-      if (!res.ok) throw new Error("Failed to fetch jobs");
-      const data = await res.json();
-      setJobs(data);
-    } catch (err) {
-      Alert.alert("Error fetching jobs", String(err));
-    }
-  };
+      const res = await fetch(`${BASE_URL}/admin/dispatches/${dispatchId}`);
+      if (!res.ok) throw new Error("Failed to fetch dispatch");
+      const dispatch = await res.json();
 
-  useEffect(() => {
-    fetchJobs();
-  }, []);
+      // Geocode the location string to lat/lon
+      const geoQuery = encodeURIComponent(dispatch.location || "");
+      const geoRes = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${geoQuery}`
+      );
+      if (!geoRes.ok) throw new Error("Failed to geocode location");
+      const geoData = await geoRes.json();
 
-  // Pull-to-refresh
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchJobs();
-    setRefreshing(false);
-  };
+      if (geoData.length === 0) {
+        throw new Error("Could not find coordinates for location");
+      }
 
-  // Start trip → mark as ongoing locally
-  const handleStartTrip = (id: number) => {
-    setJobs((prev) =>
-      prev.map((job) =>
-        job.id === id ? { ...job, status: "Ongoing" } : job
-      )
-    );
-    Alert.alert("Trip Started", "Trip is now ongoing.");
-  };
+      const destLat = parseFloat(geoData[0].lat);
+      const destLon = parseFloat(geoData[0].lon);
+      setDestination({ lat: destLat, lon: destLon, name: dispatch.location });
 
-  // Step 1 → Ask backend to send OTP (updated endpoint)
-  const handleComplete = async (job: any) => {
-    try {
-      const res = await fetch(`${BASE_URL}/admin/dispatches/${job.id}/send-otp`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Failed to send OTP");
-      setCurrentJob(job);
-      setOtpModal(true);
-    } catch (err) {
-      Alert.alert("Error", String(err));
-    }
-  };
+      // Calculate distance once current location is available
+      let dist: number | null = null;
+      if (currentLocation) {
+        dist = calculateDistance(
+          currentLocation.latitude,
+          currentLocation.longitude,
+          destLat,
+          destLon
+        );
+        setDistance(dist);
+      }
 
-  // Step 2 → Verify OTP (updated endpoint)
-  const verifyOtp = async () => {
-    if (!currentJob) return;
-    try {
-      const res = await fetch(`${BASE_URL}/admin/dispatches/${currentJob.id}/verify-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-
-      if (res.ok) {
-        await fetchJobs(); // refresh from backend
-        setOtpModal(false);
-        setCode("");
-        Alert.alert("Trip Completed", "Delivery confirmed ✅");
-      } else {
-        Alert.alert("Invalid Code", "Please try again.");
+      // Post to WebView
+      if (webViewRef.current && currentLocation) {
+        webViewRef.current.postMessage(
+          JSON.stringify({
+            center: currentLocation,
+            destination: { lat: destLat, lon: destLon, name: dispatch.location },
+            distance: dist || 0,
+          })
+        );
       }
     } catch (err) {
       Alert.alert("Error", String(err));
     }
   };
 
-  // Navigate to maps page
-  const handleViewTrip = (job: any) => {
-    router.push({
-      pathname: "/map",
-      params: { id: job.id, pickup: job.pickup, dropoff: job.dropoff },
-    });
-  };
+  // Get current location
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Location permission denied", "Cannot show your location on the map.");
+        setLoading(false);
+        return;
+      }
 
-  // Render job card (updated fields)
-  const renderJob = ({ item }: any) => (
-    <View style={styles.card}>
-      <View style={styles.row}>
-        <Text style={styles.label}>Client:</Text>
-        <Text style={styles.value}>{item.recipient || item.driver?.firstName || "-"}</Text>
-      </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>Location:</Text>
-        <Text style={styles.value}>{item.location || "-"}</Text>
-      </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>Fare:</Text>
-        <Text style={styles.fare}>{item.invoice ? `Ksh ${item.invoice}` : "-"}</Text>
-      </View>
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const userLocation = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      setCurrentLocation(userLocation);
 
-      <Text
-        style={[
-          styles.status,
-          item.status === "Ongoing" && { color: "#FFC107" },
-          (item.status === "Completed" || item.verified) && { color: "#28a745" },
-        ]}
-      >
-        {item.status || (item.verified ? "Completed" : "Pending")}
-      </Text>
+      // Fetch dispatch and geocode after getting location
+      if (id) {
+        await fetchDispatchAndGeocode(id as string);
+      }
 
-      {/* Buttons */}
-      {(!item.status || item.status === "Pending") && (
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.button, styles.start]}
-            onPress={() => handleStartTrip(item.id)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>Start</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, styles.complete]}
-            onPress={() => handleComplete(item)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>Complete</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      setLoading(false);
+    })();
+  }, [id, fetchDispatchAndGeocode]);
 
-      {item.status === "Ongoing" && (
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.button, styles.view]}
-            onPress={() => handleViewTrip(item)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>View Trip</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
+  // Update distance and post to WebView when destination changes
+  useEffect(() => {
+    if (currentLocation && destination && !distance) {
+      const dist = calculateDistance(
+        currentLocation.latitude,
+        currentLocation.longitude,
+        destination.lat,
+        destination.lon
+      );
+      setDistance(dist);
+
+      if (webViewRef.current) {
+        webViewRef.current.postMessage(
+          JSON.stringify({
+            center: currentLocation,
+            destination,
+            distance: dist,
+          })
+        );
+      }
+    }
+  }, [currentLocation, destination, distance]);
+
+  const leafletHTML = `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      <style>
+        #map { height: 100vh; width: 100%; }
+        #distance { position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 5px; z-index: 1000; }
+      </style>
+    </head>
+    <body>
+      <div id="map"></div>
+      <div id="distance"></div>
+      <script>
+        var map = L.map('map').setView([0,0], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        var currentLocationMarker = null;
+        var destinationMarker = null;
+        var routeLine = null;
+
+        // Handle messages from React Native
+        document.addEventListener("message", function(event) {
+          var data = JSON.parse(event.data);
+
+          if (data.center) {
+            // Current location marker (driver position)
+            if (currentLocationMarker) {
+              map.removeLayer(currentLocationMarker);
+            }
+            currentLocationMarker = L.marker(
+              [data.center.latitude, data.center.longitude],
+              { icon: L.icon({
+                  iconUrl: "https://cdn-icons-png.flaticon.com/512/447/447031.png", // blue dot
+                  iconSize: [30, 30],
+                  iconAnchor: [15, 30]
+                })
+              }
+            ).addTo(map).bindPopup("Driver Location");
+
+            map.setView([data.center.latitude, data.center.longitude], 13);
+          }
+
+          if (data.destination && data.distance !== undefined) {
+            // Destination marker
+            if (destinationMarker) {
+              map.removeLayer(destinationMarker);
+            }
+            destinationMarker = L.marker([data.destination.lat, data.destination.lon], {
+              icon: L.icon({
+                iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png", // red pin
+                iconSize: [30, 30],
+                iconAnchor: [15, 30]
+              })
+            }).addTo(map).bindPopup(
+              '<b>Destination:</b> ' + data.destination.name + 
+              '<br><b>Distance:</b> ' + data.distance.toFixed(2) + ' km'
+            );
+
+            // Draw route line
+            if (currentLocationMarker && routeLine) {
+              map.removeLayer(routeLine);
+            }
+            if (currentLocationMarker) {
+              var driverPos = currentLocationMarker.getLatLng();
+              var destPos = destinationMarker.getLatLng();
+              routeLine = L.polyline([driverPos, destPos], { color: 'blue', dashArray: '5, 10' }).addTo(map);
+              map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+            }
+
+            // Update distance overlay
+            document.getElementById('distance').innerHTML = 
+              '<strong>Distance to Destination:</strong> ' + data.distance.toFixed(2) + ' km';
+          }
+        });
+      </script>
+    </body>
+  </html>
+  `;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Trips</Text>
-      <FlatList
-        data={jobs}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderJob}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        contentContainerStyle={{ paddingBottom: 20 }}
+      <WebView
+        ref={webViewRef}
+        originWhitelist={["*"]}
+        source={{ html: leafletHTML }}
+        style={{ flex: 1 }}
       />
-
-      {/* OTP Modal */}
-      <Modal visible={otpModal} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalBox}>
-            <Text style={{ fontSize: 18, fontWeight: "600", marginBottom: 10 }}>
-              Enter OTP
-            </Text>
-            <TextInput
-              placeholder="Enter code"
-              value={code}
-              onChangeText={setCode}
-              keyboardType="number-pad"
-              style={styles.input}
-            />
-            <TouchableOpacity
-              style={[styles.button, styles.start]}
-              onPress={verifyOtp}
-            >
-              <Text style={styles.buttonText}>Verify</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, styles.view, { marginTop: 10 }]}
-              onPress={() => setOtpModal(false)}
-            >
-              <Text style={styles.buttonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fbbf24" />
         </View>
-      </Modal>
+      )}
     </View>
   );
 }
 
-// ---------------- STYLES ----------------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8f9fa", padding: 16 },
-  header: { fontSize: 22, fontWeight: "bold", marginBottom: 12 },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    ...Platform.select({
-      ios: { shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
-      android: { elevation: 3 },
-      web: { boxShadow: "0px 3px 6px rgba(0,0,0,0.1)" },
-    }),
-  },
-  row: { flexDirection: "row", marginBottom: 6 },
-  label: { fontWeight: "600", width: 70 },
-  value: { flex: 1, color: "#333" },
-  fare: { color: "#28a745", fontWeight: "bold" },
-  status: { marginTop: 8, fontSize: 12, fontWeight: "600", color: "#f39c12" },
-  actions: { flexDirection: "row", marginTop: 12, justifyContent: "space-between" },
-  button: {
+  container: {
     flex: 1,
-    paddingVertical: 12,
-    marginHorizontal: 5,
-    borderRadius: 8,
-    alignItems: "center",
   },
-  start: { backgroundColor: "#F5C518" }, // brand yellow
-  complete: { backgroundColor: "#dc3545" },
-  view: { backgroundColor: "#000" }, // brand black
-  buttonText: { color: "#fff", fontWeight: "600", fontSize: 14 },
-  modalContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
-  modalBox: { backgroundColor: "#fff", padding: 20, borderRadius: 12, width: "80%" },
-  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 10, marginVertical: 10 },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
 });
 
 

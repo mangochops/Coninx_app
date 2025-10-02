@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator, Alert, FlatList } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { User, Phone, Star } from "lucide-react-native";
+import { Phone,} from "lucide-react-native";
 
 export default function ProfileScreen() {
   const [driver, setDriver] = useState<any>(null);

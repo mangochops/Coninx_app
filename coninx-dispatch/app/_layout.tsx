@@ -27,7 +27,7 @@ useEffect(() => {
       router.replace('/signup');
     }, 0);
   }
-}, [segments, navigationState]);
+}, [segments, navigationState, router]);
 
 
 

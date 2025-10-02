@@ -1,13 +1,7 @@
-
-
-
 import React, { useEffect, useState, useRef } from "react";
 import { View, StyleSheet, ActivityIndicator, Alert } from "react-native";
 import { WebView } from "react-native-webview";
 import * as Location from "expo-location";
-// Polyfill for EventSource in React Native
-import EventSource from 'react-native-sse';
-
 
 export default function MapScreen() {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -15,7 +9,7 @@ export default function MapScreen() {
   const [loading, setLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
 
-  // Fetch user location
+  // Fetch user location and trips
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -26,40 +20,23 @@ export default function MapScreen() {
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+
+      // Fetch trips from backend (one-time)
+      try {
+        const API_BASE = "https://coninx-backend.onrender.com";
+        const response = await fetch(`${API_BASE}/admin/trips`);
+        if (response.ok) {
+          const fetchedTrips = await response.json();
+          setTrips(fetchedTrips);
+        } else {
+          console.warn("Failed to fetch trips");
+        }
+      } catch (err) {
+        console.error("Error fetching trips:", err);
+      }
+
       setLoading(false);
     })();
-  }, []);
-
-  // Live trip feed from Go backend SSE
-  useEffect(() => {
-    // TODO: Replace with your actual backend base URL
-    const API_BASE = "https://coninx-backend.onrender.com";
-    const es = new EventSource(`${API_BASE}/admin/trips/stream`);
-  let currentTrips: any[] = [];
-
-
-    // Optionally handle connection event (no-op)
-
-    es.addEventListener('message', (e) => {
-      try {
-        if (!e.data) return;
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'trip_created') {
-          currentTrips = [...currentTrips, msg.trip];
-        } else if (msg.type === 'trip_updated' || msg.type === 'location_update') {
-          currentTrips = currentTrips.map(t => t.id === msg.trip.id ? msg.trip : t);
-        } else if (msg.type === 'trip_deleted' || msg.type === 'trip_completed') {
-          currentTrips = currentTrips.filter(t => t.id !== msg.tripId);
-        }
-        setTrips([...currentTrips]);
-      } catch (err) {
-        // Ignore parse errors
-      }
-    });
-
-    return () => {
-      es.close();
-    };
   }, []);
 
   // Send location and trips to WebView
@@ -98,8 +75,7 @@ export default function MapScreen() {
 
         var tripMarkers = [];
         var currentLocationMarker = null;
-        var destinationMarker = null;
-        var routeLine = null;
+        var routeLines = []; // Array for multiple routes
 
         // Handle messages from React Native
         document.addEventListener("message", function(event) {
@@ -124,48 +100,53 @@ export default function MapScreen() {
             return;
           }
 
-          // --- Trips (destination) ---
+          // --- Trips (destinations) ---
           if (data.trips) {
+            // Clear previous markers and lines
             tripMarkers.forEach(function(m) { map.removeLayer(m); });
+            routeLines.forEach(function(l) { map.removeLayer(l); });
             tripMarkers = [];
+            routeLines = [];
 
             data.trips.forEach(function(trip) {
               if (typeof trip.latitude === 'number' && typeof trip.longitude === 'number') {
-                // Destination marker
-                if (destinationMarker) {
-                  map.removeLayer(destinationMarker);
-                }
-                destinationMarker = L.marker([trip.latitude, trip.longitude], {
+                // Unique trip marker
+                var tripMarker = L.marker([trip.latitude, trip.longitude], {
                   icon: L.icon({
                     iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png", // red pin
                     iconSize: [30, 30],
                     iconAnchor: [15, 30]
                   })
                 }).addTo(map)
-                  .bindPopup('<b>Destination:</b> ' + (trip.destination || ''));
+                  .bindPopup('<b>Destination:</b> ' + (trip.destination || '') + '<br><b>Recipient:</b> ' + (trip.recipient_name || ''));
 
-                tripMarkers.push(destinationMarker);
+                tripMarkers.push(tripMarker);
 
-                // --- Draw route line (if driver location is available) ---
+                // --- Draw route line to this destination (if current location available) ---
                 if (currentLocationMarker) {
                   var driverPos = currentLocationMarker.getLatLng();
-                  var destPos = destinationMarker.getLatLng();
+                  var destPos = tripMarker.getLatLng();
 
-                  if (routeLine) {
-                    map.removeLayer(routeLine);
-                  }
-                  routeLine = L.polyline([driverPos, destPos], { color: 'blue', dashArray: '5, 10' }).addTo(map);
-                  map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+                  var routeLine = L.polyline([driverPos, destPos], { color: 'blue', dashArray: '5, 10' }).addTo(map);
+                  routeLines.push(routeLine);
                 }
               }
             });
+
+            // Fit map to all markers if trips exist
+            if (tripMarkers.length > 0) {
+              var group = new L.featureGroup(tripMarkers);
+              if (currentLocationMarker) {
+                group.addLayer(currentLocationMarker);
+              }
+              map.fitBounds(group.getBounds(), { padding: [50, 50] });
+            }
           }
         });
       </script>
     </body>
   </html>
 `;
-
 
   return (
     <View style={styles.container}>
