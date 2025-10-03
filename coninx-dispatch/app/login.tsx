@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function LoginScreen() {
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -31,7 +32,7 @@ export default function LoginScreen() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            phoneNumber, // ✅ use phoneNumber instead of ID
+            phoneNumber,
             password,
           }),
         }
@@ -42,10 +43,15 @@ export default function LoginScreen() {
         throw new Error(errorText || "Invalid credentials");
       }
 
-      const data = await response.text(); // backend returns plain text
-      Alert.alert("Success", data);
+      // ✅ Expect JSON with driverId and message
+      const data = await response.json();
 
-      // 🚀 Go to tab layout (Home is index.tsx inside /app/(tabs)/ )
+      // Save driverId in AsyncStorage
+      await AsyncStorage.setItem("driverId", String(data.driverId));
+
+      Alert.alert("Success", data.message || "Login successful");
+
+      // 🚀 Go to Home (tabs navigation)
       router.replace("/(tabs)");
     } catch (err) {
       Alert.alert("Login failed", (err as Error).message);
@@ -83,7 +89,6 @@ export default function LoginScreen() {
           <TouchableOpacity
             onPress={() => setShowPassword((prev) => !prev)}
             style={styles.eyeButton}
-            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
           >
             <Text style={{ fontSize: 18, color: "#999" }}>
               {showPassword ? "🙈" : "👁️"}
@@ -113,71 +118,18 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    backgroundColor: "#f5f7fa",
-  },
-  card: {
-    width: "100%",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 24,
-    boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.1)",
-    elevation: 5,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    marginBottom: 24,
-    textAlign: "center",
-    color: "#222",
-  },
-  input: {
-    height: 50,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    marginBottom: 15,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    backgroundColor: "#fafafa",
-  },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  eyeButton: {
-    padding: 8,
-    marginLeft: -40,
-    zIndex: 1,
-  },
-  button: {
-    backgroundColor: "#eec332",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  footerText: {
-    marginTop: 20,
-    textAlign: "center",
-    fontSize: 14,
-    color: "#555",
-  },
-  link: {
-    color: "#007AFF",
-    fontWeight: "600",
-  },
+  container: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20, backgroundColor: "#f5f7fa" },
+  card: { width: "100%", backgroundColor: "#fff", borderRadius: 16, padding: 24, elevation: 5 },
+  title: { fontSize: 26, fontWeight: "bold", marginBottom: 24, textAlign: "center", color: "#222" },
+  input: { height: 50, borderRadius: 12, borderWidth: 1, borderColor: "#ddd", marginBottom: 15, paddingHorizontal: 15, fontSize: 16, backgroundColor: "#fafafa" },
+  passwordContainer: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
+  eyeButton: { padding: 8, marginLeft: -40, zIndex: 1 },
+  button: { backgroundColor: "#eec332", paddingVertical: 14, borderRadius: 12, alignItems: "center", marginTop: 10 },
+  buttonText: { color: "#fff", fontSize: 18, fontWeight: "600" },
+  footerText: { marginTop: 20, textAlign: "center", fontSize: 14, color: "#555" },
+  link: { color: "#007AFF", fontWeight: "600" },
 });
+
 
 
 

@@ -27,16 +27,16 @@ export default function TabLayout() {
         }),
       }}
     >
-      {/*🏠 Home */}
-      {/* <Tabs.Screen
+      {/* 🏠 Home */} 
+      <Tabs.Screen
         name="index"
         options={{
           title: "Home",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="house.fill" color={color} />
+            <IconSymbol size={26} name="briefcase.fill" color={color} />
           ),
         }}
-      />  */}
+      /> 
 
       {/* 📦 Jobs */}
       <Tabs.Screen

@@ -4,6 +4,9 @@
       "eas": {
         "projectId": "bbaf9af4-468c-4630-963f-d23da372bc59"
       }
+    },
+    "android": {
+      "package": "com.mangochops.coninxdispatch"
     }
   }
 }

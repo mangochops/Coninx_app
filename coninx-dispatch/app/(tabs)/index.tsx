@@ -7,11 +7,11 @@ import {
   FlatList,
   Platform,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import EventSource, { MessageEvent } from "react-native-sse";
+import * as Location from "expo-location";
 
-// ✅ Define types
 interface Dispatch {
   id: number;
   location: string;
@@ -24,22 +24,41 @@ interface Trip {
   dispatch_id: number;
   destination?: string;
   status: "pending" | "in_progress" | "completed" | string;
+  latitude?: number;
+  longitude?: number;
+}
+
+interface Driver {
+  firstName: string;
+  lastName: string;
+  idNumber: number;
+  phoneNumber?: number;
 }
 
 export default function HomeScreen() {
   const [dispatches, setDispatches] = useState<Dispatch[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [driver, setDriver] = useState<Driver | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const API_URL = "https://coninx-backend.onrender.com";
+  const API_URL = "https://coninx-backend.onrender.com/driver";
+  const DRIVER_ID = 123456; // 🔑 Replace with logged-in driver’s ID (store after login)
 
+  // ✅ Fetch Driver Info + Dispatches + Trips
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [dispatchRes, tripRes] = await Promise.all([
-          fetch(`${API_URL}/admin/dispatches`),
-          fetch(`${API_URL}/admin/trips`),
+        const [driverRes, dispatchRes, tripRes] = await Promise.all([
+          fetch(`${API_URL}/${DRIVER_ID}`),
+          fetch(`https://coninx-backend.onrender.com/admin/dispatches`),
+          fetch(`https://coninx-backend.onrender.com/admin/trips`),
         ]);
+
+        if (driverRes.ok) {
+          const driverData: Driver = await driverRes.json();
+          setDriver(driverData);
+        }
+
         const dispatchData: Dispatch[] = await dispatchRes.json();
         const tripData: Trip[] = await tripRes.json();
         setDispatches(dispatchData);
@@ -52,37 +71,57 @@ export default function HomeScreen() {
     };
 
     fetchData();
+  }, []);
 
-    // 🔴 Hook into SSE for live trip updates
-    const es = new EventSource(`${API_URL}/admin/trips/stream`);
+  // ✅ Track Driver Location & Update Backend
+  useEffect(() => {
+    let locationInterval: ReturnType<typeof setInterval> | undefined;
 
-    es.addEventListener("message", (event: MessageEvent) => {
-      if (!event.data) return; // ✅ Ensure it's not null
-      try {
-        const updatedTrip: Trip = JSON.parse(event.data);
-        setTrips((prev) => {
-          const exists = prev.find((t) => t.id === updatedTrip.id);
-          if (exists) {
-            // Update existing trip
-            return prev.map((t) => (t.id === updatedTrip.id ? updatedTrip : t));
-          } else {
-            // Append new trip
-            return [updatedTrip, ...prev];
-          }
-        });
-      } catch (err) {
-        console.error("Error parsing SSE data:", err);
+    const startTracking = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission denied", "Location access is required.");
+        return;
       }
-    });
 
-    es.addEventListener("error", (err) => {
-      console.error("SSE error:", err);
-    });
+      locationInterval = setInterval(async () => {
+        try {
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High,
+          });
+
+          if (trips.length > 0) {
+            const activeTrip = trips.find((t) => t.status !== "completed");
+            if (activeTrip) {
+              await fetch(
+                `https://coninx-backend.onrender.com/admin/trips/${activeTrip.id}/location`,
+                {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    latitude: loc.coords.latitude,
+                    longitude: loc.coords.longitude,
+                  }),
+                }
+              );
+              console.log(
+                `📍 Sent location for trip ${activeTrip.id}:`,
+                loc.coords
+              );
+            }
+          }
+        } catch (err) {
+          console.error("Location update failed:", err);
+        }
+      }, 10000);
+    };
+
+    startTracking();
 
     return () => {
-      es.close(); // cleanup when component unmounts
+      if (locationInterval) clearInterval(locationInterval);
     };
-  }, []);
+  }, [trips]);
 
   if (loading) {
     return (
@@ -97,8 +136,10 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <Text style={styles.welcome}>Hi, Driver 👋</Text>
+      {/* ✅ Dynamic Driver Greeting */}
+      <Text style={styles.welcome}>
+        Hi, {driver ? driver.firstName : "Driver"} 👋
+      </Text>
       <Text style={styles.subtitle}>Here’s your dispatch dashboard</Text>
 
       {/* Status Card */}
@@ -106,7 +147,9 @@ export default function HomeScreen() {
         <Ionicons name="car-outline" size={28} color="#2563eb" />
         <View style={{ marginLeft: 12 }}>
           <Text style={styles.cardTitle}>Status: Online</Text>
-          <Text style={styles.cardSubtitle}>{trips.length} trips assigned today</Text>
+          <Text style={styles.cardSubtitle}>
+            {trips.length} trips assigned today
+          </Text>
         </View>
       </View>
 
@@ -114,9 +157,15 @@ export default function HomeScreen() {
       {nextDispatch ? (
         <View style={[styles.assignmentCard, styles.shadow]}>
           <Text style={styles.sectionTitle}>Next Dispatch</Text>
-          <Text style={styles.assignmentText}>📍 Dropoff: {nextDispatch.location}</Text>
-          <Text style={styles.assignmentText}>👤 Client: {nextDispatch.recipient}</Text>
-          <Text style={styles.assignmentText}>🧾 Invoice No.: INV {nextDispatch.invoice}</Text>
+          <Text style={styles.assignmentText}>
+            📍 Dropoff: {nextDispatch.location}
+          </Text>
+          <Text style={styles.assignmentText}>
+            👤 Client: {nextDispatch.recipient}
+          </Text>
+          <Text style={styles.assignmentText}>
+            🧾 Invoice No.: INV {nextDispatch.invoice}
+          </Text>
           <TouchableOpacity style={styles.startButton}>
             <Text style={styles.startButtonText}>Start Trip</Text>
           </TouchableOpacity>
@@ -259,4 +308,6 @@ const styles = StyleSheet.create({
     }),
   },
 });
+
+
 
