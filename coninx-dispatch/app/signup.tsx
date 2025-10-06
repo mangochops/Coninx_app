@@ -43,8 +43,8 @@ export default function SignupScreen() {
           body: JSON.stringify({
             firstName,
             lastName,
-            IDNumber: parseInt(IDNumber, 10),
-            phoneNumber, // ✅ include phone number
+            idNumber: parseInt(IDNumber, 10),
+            phoneNumber: parseInt(phoneNumber, 10),
             password,
           }),
         }
