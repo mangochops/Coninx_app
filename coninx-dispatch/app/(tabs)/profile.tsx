@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator, Alert, FlatList } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Phone,} from "lucide-react-native";
+
 
 export default function ProfileScreen() {
   const [driver, setDriver] = useState<any>(null);
@@ -67,7 +67,7 @@ export default function ProfileScreen() {
       {/* Profile Header */}
       <View style={styles.header}>
         <Image
-          source={{ uri: "https://randomuser.me/api/portraits/men/32.jpg" }}
+          source={require("../../assets/images/profileAvatar.png")}
           style={styles.avatar}
         />
         <Text style={styles.name}>{driver.firstName} {driver.lastName}</Text>
@@ -77,9 +77,9 @@ export default function ProfileScreen() {
       {/* Driver Info */}
       <View style={styles.infoCard}>
         <View style={styles.row}>
-          <Phone size={20} color="#2563eb" />
-          <Text style={styles.infoText}>Phone: {driver.phoneNumber}</Text>
-        </View>
+               
+                <Text style={styles.infoText}>ID Number: {driver.idNumber}</Text>
+              </View>
       </View>
 
       {/* Trips Section */}

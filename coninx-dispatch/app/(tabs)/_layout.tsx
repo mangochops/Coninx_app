@@ -44,7 +44,7 @@ export default function TabLayout() {
         options={{
           title: "Jobs",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="briefcase.fill" color={color} />
+            <IconSymbol size={26} name="house.fill" color={color} />
           ),
         }}
       />
@@ -61,15 +61,7 @@ export default function TabLayout() {
       />
 
       {/* 🔔 Notifications */}
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          title: "Notifications",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="bell.fill" color={color} />
-          ),
-        }}
-      />
+      
 
       {/* 👤 Profile */}
       <Tabs.Screen

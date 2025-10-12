@@ -10,6 +10,8 @@ import {
   Platform,
 } from "react-native";
 import { router } from "expo-router";
+import SuccessModal from "../components/SuccessModal";
+
 
 export default function SignupScreen() {
   const [firstName, setFirstName] = useState("");
@@ -21,6 +23,9 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [successVisible, setSuccessVisible] = useState(false);
+const [successMessage, setSuccessMessage] = useState("");
+
 
   const handleSignup = async () => {
     if (!firstName || !lastName || !IDNumber || !phoneNumber || !password || !confirmPassword) {
@@ -56,17 +61,13 @@ export default function SignupScreen() {
       }
 
       const message = await response.text();
-      Alert.alert("Success", message, [
-        {
-          text: "OK",
-          onPress: () => router.replace("/(tabs)"),
-        },
-      ]);
-    } catch (error) {
-      Alert.alert("Error", error instanceof Error ? error.message : String(error));
-    } finally {
-      setLoading(false);
-    }
+      setSuccessMessage(message || "Registration successful!");
+    setSuccessVisible(true);
+  } catch (error) {
+    Alert.alert("Error", error instanceof Error ? error.message : String(error));
+  } finally {
+    setLoading(false);
+  }
   };
 
   return (
@@ -167,6 +168,15 @@ export default function SignupScreen() {
           </Text>
         </Text>
       </View>
+
+      <SuccessModal
+        visible={successVisible}
+        message={successMessage}
+        onFinish={() => {
+          setSuccessVisible(false);
+          router.push("/(tabs)");
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
