@@ -13,13 +13,13 @@ import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function LoginScreen() {
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [IDNumber, setIDNumber] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
-    if (!phoneNumber || !password) {
+    if (!IDNumber || !password) {
       Alert.alert("Error", "Please fill in all fields.");
       return;
     }
@@ -32,7 +32,7 @@ export default function LoginScreen() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            phoneNumber,
+            IDNumber,
             password,
           }),
         }
@@ -70,11 +70,11 @@ export default function LoginScreen() {
 
         <TextInput
           style={styles.input}
-          placeholder="Phone Number"
+          placeholder="ID Number"
           placeholderTextColor="#999"
           keyboardType="phone-pad"
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
+          value={IDNumber}
+          onChangeText={setIDNumber}
         />
 
         <View style={styles.passwordContainer}>
