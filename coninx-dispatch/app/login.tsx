@@ -11,12 +11,15 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import SuccessModal from "../components/SuccessModal";
 
 export default function LoginScreen() {
   const [IDNumber, setIDNumber] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [successVisible, setSuccessVisible] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   const handleLogin = async () => {
     if (!IDNumber || !password) {
@@ -43,6 +46,10 @@ export default function LoginScreen() {
         throw new Error(errorText || "Invalid credentials");
       }
 
+
+      const message = await response.text();
+      setSuccessMessage(message || "Registration successful!");
+    setSuccessVisible(true);
       // ✅ Expect JSON with driverId and message
       const data = await response.json();
 
@@ -113,6 +120,14 @@ export default function LoginScreen() {
           </Text>
         </Text>
       </View>
+      <SuccessModal
+              visible={successVisible}
+              message={successMessage}
+              onFinish={() => {
+                setSuccessVisible(false);
+                router.push("/(tabs)");
+              }}
+            />
     </KeyboardAvoidingView>
   );
 }
