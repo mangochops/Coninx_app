@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import SuccessModal from "../components/SuccessModal";
+import LoginSuccessModal from "../components/LoginSuccessModal";
 
 export default function LoginScreen() {
   const [IDNumber, setIDNumber] = useState("");
@@ -47,21 +47,22 @@ export default function LoginScreen() {
       }
 
 
-      const message = await response.text();
-      setSuccessMessage(message || "Registration successful!");
+     const data = await response.json();
+      setSuccessMessage(data.message || "Login successful!");
+
     setSuccessVisible(true);
-      // ✅ Expect JSON with driverId and message
-      const data = await response.json();
+      
+      
 
       // Save driverId in AsyncStorage
-      await AsyncStorage.setItem("driverId", String(data.driverId));
+      await AsyncStorage.setItem("idNumber", String(data.driverId));
+
 
       Alert.alert("Success", data.message || "Login successful");
 
       // 🚀 Go to Home (tabs navigation)
       router.replace("/(tabs)");
-    } catch (err) {
-      Alert.alert("Login failed", (err as Error).message);
+    
     } finally {
       setLoading(false);
     }
@@ -120,7 +121,7 @@ export default function LoginScreen() {
           </Text>
         </Text>
       </View>
-      <SuccessModal
+      <LoginSuccessModal
               visible={successVisible}
               message={successMessage}
               onFinish={() => {
