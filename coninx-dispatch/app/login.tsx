@@ -47,12 +47,12 @@ export default function LoginScreen() {
       }
 
 
-     const data = await response.json();
-      setSuccessMessage(data.message || "Login successful!");
+      const data = await response.json();
+      setSuccessMessage(data || "Login successful!");
 
-    setSuccessVisible(true);
-      
-      
+      setSuccessVisible(true);
+
+
 
       // Save driverId in AsyncStorage
       await AsyncStorage.setItem("idNumber", String(data.driverId));
@@ -62,7 +62,7 @@ export default function LoginScreen() {
 
       // 🚀 Go to Home (tabs navigation)
       router.replace("/(tabs)");
-    
+
     } finally {
       setLoading(false);
     }
@@ -122,13 +122,13 @@ export default function LoginScreen() {
         </Text>
       </View>
       <LoginSuccessModal
-              visible={successVisible}
-              message={successMessage}
-              onFinish={() => {
-                setSuccessVisible(false);
-                router.push("/(tabs)");
-              }}
-            />
+        visible={successVisible}
+        message={successMessage}
+        onFinish={() => {
+          setSuccessVisible(false);
+          router.push("/(tabs)");
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }

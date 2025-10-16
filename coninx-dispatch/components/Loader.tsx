@@ -1,7 +1,7 @@
 // components/Loader.tsx
 import React from "react";
 import { View, StyleSheet, Image } from "react-native";
-import Spinner from "react-native-animated-spinkit";
+import { Wave } from "react-native-animated-spinkit";
 
 const Loader = ({ visible = false }) => {
   if (!visible) return null;
@@ -13,7 +13,7 @@ const Loader = ({ visible = false }) => {
         style={styles.logo}
         resizeMode="contain"
       />
-      <Spinner type="Wave" size={60} color="#FACC15" /> 
+      <Wave size={60} color="#FACC15" />
       {/* Brand Yellow */}
     </View>
   );

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import Loader from "@/components/Loader";
 
 interface Dispatch {
   id: number;
@@ -42,7 +43,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
 
   const API_URL = "https://coninx-backend.onrender.com/driver";
-  const DRIVER_ID = 123456; // 🔑 Replace with logged-in driver’s ID (store after login)
+  const DRIVER_ID = driver?.idNumber; // 🔑 Replace with logged-in driver’s ID (store after login)
 
   // ✅ Fetch Driver Info + Dispatches + Trips
   useEffect(() => {
@@ -71,7 +72,7 @@ export default function HomeScreen() {
     };
 
     fetchData();
-  }, []);
+  }, [DRIVER_ID]);
 
   // ✅ Track Driver Location & Update Backend
   useEffect(() => {
@@ -127,7 +128,8 @@ export default function HomeScreen() {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" color="#2563eb" />
-        <Text>Loading your dashboard...</Text>
+
+        <Loader visible={loading} />
       </View>
     );
   }
