@@ -27,16 +27,16 @@ export default function TabLayout() {
         }),
       }}
     >
-      {/* 🏠 Home */} 
+      {/* 🏠 Home */}
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="briefcase.fill" color={color} />
+            <IconSymbol size={26} name="house.fill" color={color} />
           ),
         }}
-      /> 
+      />
 
       {/* 📦 Jobs */}
       <Tabs.Screen
@@ -44,7 +44,7 @@ export default function TabLayout() {
         options={{
           title: "Jobs",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="house.fill" color={color} />
+            <IconSymbol size={26} name="briefcase.fill" color={color} />
           ),
         }}
       />
@@ -61,7 +61,7 @@ export default function TabLayout() {
       />
 
       {/* 🔔 Notifications */}
-      
+
 
       {/* 👤 Profile */}
       <Tabs.Screen

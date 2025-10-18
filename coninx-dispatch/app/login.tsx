@@ -58,7 +58,7 @@ export default function LoginScreen() {
       await AsyncStorage.setItem("idNumber", String(data.driverId));
 
 
-      Alert.alert("Success", data.message || "Login successful");
+      Alert.alert("Success", data || "Login successful");
 
       // 🚀 Go to Home (tabs navigation)
       router.replace("/(tabs)");
