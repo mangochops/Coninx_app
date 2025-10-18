@@ -1,152 +1,159 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View, StyleSheet, ActivityIndicator, Alert } from "react-native";
+import { View, StyleSheet, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
-import * as Location from "expo-location";
+import { useLocalSearchParams } from "expo-router";
 
 export default function MapScreen() {
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [trips, setTrips] = useState<any[]>([]);
+  const { destination, dispatchId } = useLocalSearchParams();
+  const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
 
-  // Fetch user location and trips
-  useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Location permission denied", "Cannot show your location on the map.");
-        setLoading(false);
-        return;
-      }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
 
-      // Fetch trips from backend (one-time)
+  // <-- Replace with your local or deployed Go server
+
+  // 🔁 Poll backend for updated driver location every few seconds
+  useEffect(() => {
+    let interval: any;
+
+    const fetchDriverLocation = async () => {
       try {
-        const API_BASE = "https://coninx-backend.onrender.com";
-        const response = await fetch(`${API_BASE}/admin/trips`);
-        if (response.ok) {
-          const fetchedTrips = await response.json();
-          setTrips(fetchedTrips);
-        } else {
-          console.warn("Failed to fetch trips");
+        const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/driver/${dispatchId}/location`);
+        const data = await res.json();
+        if (data.latitude && data.longitude) {
+          setDriverLocation({ latitude: data.latitude, longitude: data.longitude });
+          setLoading(false);
         }
       } catch (err) {
-        console.error("Error fetching trips:", err);
+        console.log("Location fetch error:", err);
       }
+    };
 
-      setLoading(false);
-    })();
-  }, []);
+    fetchDriverLocation(); // initial fetch
+    interval = setInterval(fetchDriverLocation, 5000); // repeat every 5s
 
-  // Send location and trips to WebView
+    return () => clearInterval(interval);
+  }, [dispatchId]);
+
+  // 📤 Send data to Leaflet when location or destination changes
   useEffect(() => {
-    if (webViewRef.current) {
-      if (location) {
-        webViewRef.current.postMessage(JSON.stringify({ center: location }));
-      }
-      if (trips.length > 0) {
-        webViewRef.current.postMessage(JSON.stringify({ trips }));
-      }
+    if (webViewRef.current && driverLocation && destination) {
+      webViewRef.current.postMessage(
+        JSON.stringify({ driverLocation, destination })
+      );
     }
-  }, [location, trips]);
+  }, [driverLocation, destination]);
 
+  // 🧭 Leaflet map logic
   const leafletHTML = `
   <!DOCTYPE html>
   <html>
     <head>
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      />
-      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+      <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+      <script src="https://unpkg.com/leaflet.smooth_marker_bouncing/dist/bundle.js"></script>
       <style>
-        #map { height: 100vh; width: 100%; }
+        html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; }
+        .eta-box {
+          position: absolute;
+          top: 10px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(255,255,255,0.9);
+          padding: 10px 16px;
+          border-radius: 8px;
+          font-size: 14px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          z-index: 999;
+        }
       </style>
     </head>
     <body>
       <div id="map"></div>
+      <div class="eta-box" id="etaBox">Fetching route...</div>
+
       <script>
         var map = L.map('map').setView([0,0], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        var tripMarkers = [];
-        var currentLocationMarker = null;
-        var routeLines = []; // Array for multiple routes
+        var driverMarker, destMarker, routeLine;
+        var cachedRoute = null;
 
-        // Handle messages from React Native
-        document.addEventListener("message", function(event) {
-          var data = JSON.parse(event.data);
+        async function fetchRoute(start, end) {
+          if (cachedRoute) return cachedRoute;
+          const url = \`https://router.project-osrm.org/route/v1/driving/\${start.lng},\${start.lat};\${end.lng},\${end.lat}?overview=full&geometries=geojson\`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.routes && data.routes.length > 0) {
+            cachedRoute = data.routes[0];
+            return cachedRoute;
+          }
+          return null;
+        }
 
-          // --- Current location marker ---
-          if (data.center) {
-            if (currentLocationMarker) {
-              map.removeLayer(currentLocationMarker);
-            }
-            currentLocationMarker = L.marker(
-              [data.center.latitude, data.center.longitude],
-              { icon: L.icon({
-                  iconUrl: "https://cdn-icons-png.flaticon.com/512/447/447031.png", // blue dot marker
-                  iconSize: [30, 30],
-                  iconAnchor: [15, 30]
-                })
-              }
-            ).addTo(map).bindPopup("You are here");
+        // Receive messages from React Native
+        document.addEventListener("message", async function(event) {
+          const data = JSON.parse(event.data);
+          if (!data.driverLocation || !data.destination) return;
 
-            map.setView([data.center.latitude, data.center.longitude], 13);
-            return;
+          const { latitude, longitude } = data.driverLocation;
+          map.setView([latitude, longitude], 14);
+
+          // 🧍‍♂️ Add or update driver marker
+          if (!driverMarker) {
+            driverMarker = L.marker([latitude, longitude], {
+              icon: L.icon({
+                iconUrl: "https://cdn-icons-png.flaticon.com/512/447/447031.png",
+                iconSize: [35, 35],
+                iconAnchor: [17, 34]
+              }),
+              bounceOnAdd: true,
+              bounceOnAddOptions: { duration: 800, height: 50 }
+            }).addTo(map).bindPopup("Driver");
+          } else {
+            driverMarker.setLatLng([latitude, longitude]);
           }
 
-          // --- Trips (destinations) ---
-          if (data.trips) {
-            // Clear previous markers and lines
-            tripMarkers.forEach(function(m) { map.removeLayer(m); });
-            routeLines.forEach(function(l) { map.removeLayer(l); });
-            tripMarkers = [];
-            routeLines = [];
+          // 🎯 Fetch destination coordinates dynamically via Nominatim
+          const geoRes = await fetch(\`https://nominatim.openstreetmap.org/search?format=json&q=\${encodeURIComponent(data.destination)}\`);
+          const geoData = await geoRes.json();
+          if (geoData.length === 0) return;
 
-            data.trips.forEach(function(trip) {
-              if (typeof trip.latitude === 'number' && typeof trip.longitude === 'number') {
-                // Unique trip marker
-                var tripMarker = L.marker([trip.latitude, trip.longitude], {
-                  icon: L.icon({
-                    iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png", // red pin
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 30]
-                  })
-                }).addTo(map)
-                  .bindPopup('<b>Destination:</b> ' + (trip.destination || '') + '<br><b>Recipient:</b> ' + (trip.recipient_name || ''));
+          const destLat = parseFloat(geoData[0].lat);
+          const destLng = parseFloat(geoData[0].lon);
 
-                tripMarkers.push(tripMarker);
+          // Add destination marker
+          if (!destMarker) {
+            destMarker = L.marker([destLat, destLng], {
+              icon: L.icon({
+                iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+                iconSize: [35, 35],
+                iconAnchor: [17, 34]
+              })
+            }).addTo(map).bindPopup("Destination");
+          }
 
-                // --- Draw route line to this destination (if current location available) ---
-                if (currentLocationMarker) {
-                  var driverPos = currentLocationMarker.getLatLng();
-                  var destPos = tripMarker.getLatLng();
+          // 🛣️ Fetch and draw route if not cached
+          const route = await fetchRoute({ lat: latitude, lng: longitude }, { lat: destLat, lng: destLng });
+          if (route) {
+            const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+            if (routeLine) map.removeLayer(routeLine);
+            routeLine = L.polyline(coords, { color: '#2563eb', weight: 5 }).addTo(map);
 
-                  var routeLine = L.polyline([driverPos, destPos], { color: 'blue', dashArray: '5, 10' }).addTo(map);
-                  routeLines.push(routeLine);
-                }
-              }
-            });
+            const km = (route.distance / 1000).toFixed(1);
+            const mins = Math.round(route.duration / 60);
+            document.getElementById('etaBox').innerHTML = \`📍 ETA: \${mins} min | Distance: \${km} km\`;
 
-            // Fit map to all markers if trips exist
-            if (tripMarkers.length > 0) {
-              var group = new L.featureGroup(tripMarkers);
-              if (currentLocationMarker) {
-                group.addLayer(currentLocationMarker);
-              }
-              map.fitBounds(group.getBounds(), { padding: [50, 50] });
-            }
+            map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
           }
         });
       </script>
     </body>
   </html>
-`;
+  `;
 
   return (
     <View style={styles.container}>
@@ -158,7 +165,7 @@ export default function MapScreen() {
       />
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#fbbf24" />
+          <ActivityIndicator size="large" color="#2563eb" />
         </View>
       )}
     </View>
@@ -166,15 +173,15 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(255,255,255,0.7)",
+    alignItems: "center",
+    justifyContent: "center",
     zIndex: 10,
   },
 });
+
+
 

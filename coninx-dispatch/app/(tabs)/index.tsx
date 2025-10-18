@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import { useRouter } from "expo-router";
 import Loader from "@/components/Loader";
 
 interface Dispatch {
@@ -42,17 +43,17 @@ export default function HomeScreen() {
   const [driver, setDriver] = useState<Driver | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const API_URL = "https://coninx-backend.onrender.com/driver";
-  const DRIVER_ID = driver?.idNumber; // 🔑 Replace with logged-in driver’s ID (store after login)
+  const router = useRouter();
+  const API_URL = useMemo(() => process.env.EXPO_PUBLIC_BACKEND_URL, []);
+  const DRIVER_ID = driver?.idNumber;
 
-  // ✅ Fetch Driver Info + Dispatches + Trips
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [driverRes, dispatchRes, tripRes] = await Promise.all([
           fetch(`${API_URL}/${DRIVER_ID}`),
-          fetch(`https://coninx-backend.onrender.com/admin/dispatches`),
-          fetch(`https://coninx-backend.onrender.com/admin/trips`),
+          fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/admin/dispatches`),
+          fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/admin/trips`),
         ]);
 
         if (driverRes.ok) {
@@ -70,13 +71,12 @@ export default function HomeScreen() {
         setLoading(false);
       }
     };
-
     fetchData();
-  }, [DRIVER_ID]);
+  }, [API_URL, DRIVER_ID]);
 
-  // ✅ Track Driver Location & Update Backend
+  // location update logic unchanged
   useEffect(() => {
-    let locationInterval: ReturnType<typeof setInterval> | undefined;
+    let locationInterval: number | undefined; // ✅ React Native returns number, not Timeout
 
     const startTracking = async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -91,44 +91,40 @@ export default function HomeScreen() {
             accuracy: Location.Accuracy.High,
           });
 
-          if (trips.length > 0) {
-            const activeTrip = trips.find((t) => t.status !== "completed");
-            if (activeTrip) {
-              await fetch(
-                `https://coninx-backend.onrender.com/admin/trips/${activeTrip.id}/location`,
-                {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    latitude: loc.coords.latitude,
-                    longitude: loc.coords.longitude,
-                  }),
-                }
-              );
-              console.log(
-                `📍 Sent location for trip ${activeTrip.id}:`,
-                loc.coords
-              );
-            }
+          const activeTrip = trips.find((t) => t.status !== "completed");
+          if (activeTrip) {
+            await fetch(
+              `${process.env.EXPO_PUBLIC_BACKEND_URL}/admin/trips/${activeTrip.id}/location`,
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  latitude: loc.coords.latitude,
+                  longitude: loc.coords.longitude,
+                }),
+              }
+            );
           }
         } catch (err) {
           console.error("Location update failed:", err);
         }
-      }, 10000);
+      }, 10000); // every 10 seconds
     };
 
     startTracking();
 
+    // ✅ Clean up properly
     return () => {
       if (locationInterval) clearInterval(locationInterval);
     };
   }, [trips]);
 
+
+
   if (loading) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" color="#2563eb" />
-
         <Loader visible={loading} />
       </View>
     );
@@ -138,13 +134,9 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ✅ Dynamic Driver Greeting */}
-      <Text style={styles.welcome}>
-        Hi, {driver ? driver.firstName : "Driver"} 👋
-      </Text>
+      <Text style={styles.welcome}>Hi, {driver?.firstName || "Driver"} 👋</Text>
       <Text style={styles.subtitle}>Here’s your dispatch dashboard</Text>
 
-      {/* Status Card */}
       <View style={[styles.card, styles.shadow]}>
         <Ionicons name="car-outline" size={28} color="#2563eb" />
         <View style={{ marginLeft: 12 }}>
@@ -155,7 +147,6 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Next Assignment */}
       {nextDispatch ? (
         <View style={[styles.assignmentCard, styles.shadow]}>
           <Text style={styles.sectionTitle}>Next Dispatch</Text>
@@ -168,7 +159,19 @@ export default function HomeScreen() {
           <Text style={styles.assignmentText}>
             🧾 Invoice No.: INV {nextDispatch.invoice}
           </Text>
-          <TouchableOpacity style={styles.startButton}>
+
+          <TouchableOpacity
+            style={styles.startButton}
+            onPress={() =>
+              router.push({
+                pathname: "/map",
+                params: {
+                  dispatchId: nextDispatch.id,
+                  destination: nextDispatch.location,
+                },
+              })
+            }
+          >
             <Text style={styles.startButtonText}>Start Trip</Text>
           </TouchableOpacity>
         </View>
@@ -176,7 +179,6 @@ export default function HomeScreen() {
         <Text style={styles.noDispatch}>No upcoming dispatches</Text>
       )}
 
-      {/* Recent Trips */}
       <Text style={styles.sectionTitle}>Recent Trips</Text>
       <FlatList
         data={trips}
