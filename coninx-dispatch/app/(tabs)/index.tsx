@@ -125,7 +125,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" color="#2563eb" />
-        <Loader visible={loading} />
+        <Loader />
       </View>
     );
   }

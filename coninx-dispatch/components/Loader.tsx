@@ -1,41 +1,62 @@
-// components/Loader.tsx
-import React from "react";
-import { View, StyleSheet, Image } from "react-native";
-import { Wave } from "react-native-animated-spinkit";
+import React, { useEffect, useRef } from "react";
+import { View, Animated, StyleSheet } from "react-native";
 
-const Loader = ({ visible = false }) => {
-  if (!visible) return null;
+export default function Loader() {
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, [spinAnim]);
+
+  const rotateZ = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  const rotateY = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
 
   return (
-    <View style={styles.overlay}>
-      <Image
-        source={require("@/assets/images/ConinxLogo.png")}
-        style={styles.logo}
-        resizeMode="contain"
+    <View style={styles.container}>
+      {/* Main rotated square */}
+      <Animated.View style={[styles.loader, { transform: [{ rotateZ }] }]} />
+
+      {/* Second animated overlay (like :after) */}
+      <Animated.View
+        style={[
+          styles.loader,
+          styles.loaderAfter,
+          { transform: [{ rotateY }] },
+        ]}
       />
-      <Wave size={60} color="#FACC15" />
-      {/* Brand Yellow */}
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.85)", // Brand black overlay
+  container: {
+    width: 48,
+    height: 48,
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 999,
   },
-  logo: {
-    width: 100,
-    height: 100,
-    marginBottom: 20,
+  loader: {
+    position: "absolute",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#000",
+  },
+  loaderAfter: {
+    backgroundColor: "#eec332",
   },
 });
 
-export default Loader;
