@@ -4,16 +4,19 @@ import { WebView } from "react-native-webview";
 import { useLocalSearchParams } from "expo-router";
 
 export default function MapScreen() {
-  const { destination, dispatchId } = useLocalSearchParams();
+  // ✅ Normalize parameters
+  const rawParams = useLocalSearchParams();
+  const destination = Array.isArray(rawParams.destination) ? rawParams.destination[0] : rawParams.destination;
+  const dispatchId = Array.isArray(rawParams.dispatchId) ? rawParams.dispatchId[0] : rawParams.dispatchId;
+
   const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
 
-
-  // <-- Replace with your local or deployed Go server
-
-  // 🔁 Poll backend for updated driver location every few seconds
+  // 🌍 Fetch driver location every 5s
   useEffect(() => {
+    if (!dispatchId) return;
     let interval: any;
 
     const fetchDriverLocation = async () => {
@@ -25,26 +28,41 @@ export default function MapScreen() {
           setLoading(false);
         }
       } catch (err) {
-        console.log("Location fetch error:", err);
+        console.log("Driver location fetch error:", err);
       }
     };
 
-    fetchDriverLocation(); // initial fetch
-    interval = setInterval(fetchDriverLocation, 5000); // repeat every 5s
+    fetchDriverLocation();
+    interval = setInterval(fetchDriverLocation, 5000);
 
     return () => clearInterval(interval);
   }, [dispatchId]);
 
-  // 📤 Send data to Leaflet when location or destination changes
+  // 🌐 Fetch destination coordinates once
   useEffect(() => {
-    if (webViewRef.current && driverLocation && destination) {
-      webViewRef.current.postMessage(
-        JSON.stringify({ driverLocation, destination })
-      );
-    }
-  }, [driverLocation, destination]);
+    if (!destination) return;
+    const fetchDest = async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destination)}`);
+        const data = await res.json();
+        if (data.length > 0) {
+          setDestCoords({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+        }
+      } catch (err) {
+        console.log("Destination fetch error:", err);
+      }
+    };
+    fetchDest();
+  }, [destination]);
 
-  // 🧭 Leaflet map logic
+  // 📤 Send updates to WebView
+  useEffect(() => {
+    if (webViewRef.current && driverLocation && destCoords) {
+      webViewRef.current.postMessage(JSON.stringify({ driverLocation, destCoords }));
+    }
+  }, [driverLocation, destCoords]);
+
+  // 🔹 Leaflet HTML with cached route
   const leafletHTML = `
   <!DOCTYPE html>
   <html>
@@ -75,9 +93,7 @@ export default function MapScreen() {
 
       <script>
         var map = L.map('map').setView([0,0], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
 
         var driverMarker, destMarker, routeLine;
         var cachedRoute = null;
@@ -94,15 +110,16 @@ export default function MapScreen() {
           return null;
         }
 
-        // Receive messages from React Native
         document.addEventListener("message", async function(event) {
           const data = JSON.parse(event.data);
-          if (!data.driverLocation || !data.destination) return;
+          if (!data.driverLocation || !data.destCoords) return;
 
           const { latitude, longitude } = data.driverLocation;
+          const { lat: destLat, lng: destLng } = data.destCoords;
+
           map.setView([latitude, longitude], 14);
 
-          // 🧍‍♂️ Add or update driver marker
+          // Driver marker
           if (!driverMarker) {
             driverMarker = L.marker([latitude, longitude], {
               icon: L.icon({
@@ -117,15 +134,7 @@ export default function MapScreen() {
             driverMarker.setLatLng([latitude, longitude]);
           }
 
-          // 🎯 Fetch destination coordinates dynamically via Nominatim
-          const geoRes = await fetch(\`https://nominatim.openstreetmap.org/search?format=json&q=\${encodeURIComponent(data.destination)}\`);
-          const geoData = await geoRes.json();
-          if (geoData.length === 0) return;
-
-          const destLat = parseFloat(geoData[0].lat);
-          const destLng = parseFloat(geoData[0].lon);
-
-          // Add destination marker
+          // Destination marker
           if (!destMarker) {
             destMarker = L.marker([destLat, destLng], {
               icon: L.icon({
@@ -136,18 +145,19 @@ export default function MapScreen() {
             }).addTo(map).bindPopup("Destination");
           }
 
-          // 🛣️ Fetch and draw route if not cached
-          const route = await fetchRoute({ lat: latitude, lng: longitude }, { lat: destLat, lng: destLng });
-          if (route) {
-            const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
-            if (routeLine) map.removeLayer(routeLine);
-            routeLine = L.polyline(coords, { color: '#2563eb', weight: 5 }).addTo(map);
+          // Fetch route only once
+          if (!cachedRoute) {
+            const route = await fetchRoute({ lat: latitude, lng: longitude }, { lat: destLat, lng: destLng });
+            if (route) {
+              const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+              routeLine = L.polyline(coords, { color: '#2563eb', weight: 5 }).addTo(map);
 
-            const km = (route.distance / 1000).toFixed(1);
-            const mins = Math.round(route.duration / 60);
-            document.getElementById('etaBox').innerHTML = \`📍 ETA: \${mins} min | Distance: \${km} km\`;
+              const km = (route.distance / 1000).toFixed(1);
+              const mins = Math.round(route.duration / 60);
+              document.getElementById('etaBox').innerHTML = \`📍 ETA: \${mins} min | Distance: \${km} km\`;
 
-            map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+              map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+            }
           }
         });
       </script>
@@ -182,6 +192,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 });
+
+
 
 
 
