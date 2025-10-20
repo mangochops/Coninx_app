@@ -57,11 +57,13 @@ export default function LoginScreen() {
       // Save driverId in AsyncStorage
       await AsyncStorage.setItem("idNumber", String(data.driverId));
 
+      Alert.alert("Success", data || "Login successful", [
+        {
+          text: "OK",
+          onPress: () => router.push("/(tabs)"),
+        },
+      ]);
 
-      Alert.alert("Success", data || "Login successful");
-
-      // 🚀 Go to Home (tabs navigation)
-      router.replace("/(tabs)");
 
     } finally {
       setLoading(false);

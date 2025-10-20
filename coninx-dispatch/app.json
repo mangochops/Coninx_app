@@ -33,7 +33,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/coninx-splash.png",
+          "image": "./assets/images/ConinxLogo.png",
           "imageWidth": 300,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
