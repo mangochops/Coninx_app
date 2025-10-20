@@ -34,10 +34,7 @@ export default function LoginScreen() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            IDNumber,
-            password,
-          }),
+          body: JSON.stringify({ IDNumber, password }),
         }
       );
 
@@ -46,29 +43,31 @@ export default function LoginScreen() {
         throw new Error(errorText || "Invalid credentials");
       }
 
-
       const data = await response.json();
-      setSuccessMessage(data || "Login successful!");
 
+      // ✅ Save the driver ID
+      if (data.driverId) {
+        await AsyncStorage.setItem("idNumber", String(data.driverId));
+      }
+
+      // ✅ Show modal or message
+      setSuccessMessage("Login successful!");
       setSuccessVisible(true);
 
-
-
-      // Save driverId in AsyncStorage
-      await AsyncStorage.setItem("idNumber", String(data.driverId));
-
-      Alert.alert("Success", data || "Login successful", [
-        {
-          text: "OK",
-          onPress: () => router.push("/(tabs)"),
-        },
-      ]);
-
-
+      // ⏳ Delay before redirect to allow UI update
+      setTimeout(() => {
+        router.replace("/(tabs)"); // navigate to tabs root (typed route)
+      }, 1200);
+    } catch (err) {
+      console.error("Login error:", err);
+      const errorMessage =
+        err instanceof Error ? err.message : typeof err === "string" ? err : "Something went wrong";
+      Alert.alert("Login Failed", errorMessage);
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <KeyboardAvoidingView
@@ -136,15 +135,57 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20, backgroundColor: "#f5f7fa" },
-  card: { width: "100%", backgroundColor: "#fff", borderRadius: 16, padding: 24, elevation: 5 },
-  title: { fontSize: 26, fontWeight: "bold", marginBottom: 24, textAlign: "center", color: "#222" },
-  input: { height: 50, borderRadius: 12, borderWidth: 1, borderColor: "#ddd", marginBottom: 15, paddingHorizontal: 15, fontSize: 16, backgroundColor: "#fafafa" },
-  passwordContainer: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    backgroundColor: "#f5f7fa",
+  },
+  card: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    elevation: 5,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "bold",
+    marginBottom: 24,
+    textAlign: "center",
+    color: "#222",
+  },
+  input: {
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    marginBottom: 15,
+    paddingHorizontal: 15,
+    fontSize: 16,
+    backgroundColor: "#fafafa",
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
+  },
   eyeButton: { padding: 8, marginLeft: -40, zIndex: 1 },
-  button: { backgroundColor: "#eec332", paddingVertical: 14, borderRadius: 12, alignItems: "center", marginTop: 10 },
+  button: {
+    backgroundColor: "#eec332",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 10,
+  },
   buttonText: { color: "#fff", fontSize: 18, fontWeight: "600" },
-  footerText: { marginTop: 20, textAlign: "center", fontSize: 14, color: "#555" },
+  footerText: {
+    marginTop: 20,
+    textAlign: "center",
+    fontSize: 14,
+    color: "#555",
+  },
   link: { color: "#007AFF", fontWeight: "600" },
 });
 

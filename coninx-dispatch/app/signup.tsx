@@ -24,7 +24,7 @@ export default function SignupScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [successVisible, setSuccessVisible] = useState(false);
-const [successMessage, setSuccessMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
 
   const handleSignup = async () => {
@@ -62,12 +62,12 @@ const [successMessage, setSuccessMessage] = useState("");
 
       const message = await response.text();
       setSuccessMessage(message || "Registration successful!");
-    setSuccessVisible(true);
-  } catch (error) {
-    Alert.alert("Error", error instanceof Error ? error.message : String(error));
-  } finally {
-    setLoading(false);
-  }
+      setSuccessVisible(true);
+    } catch (error) {
+      Alert.alert("Error", error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
