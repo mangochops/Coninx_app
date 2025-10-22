@@ -43,18 +43,15 @@
     "experiments": {
       "typedRoutes": true
     },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "bbaf9af4-468c-4630-963f-d23da372bc59"
-      }
-    },
-    "owner": "mangochops",
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {
-      "url": "https://u.expo.dev/bbaf9af4-468c-4630-963f-d23da372bc59"
-    }
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "41eda87e-4207-4a97-9909-f9828cffeb56"
+      }
+    },
+    "owner": "eng.willy"
   }
 }
