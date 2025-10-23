@@ -45,38 +45,49 @@ export default function HomeScreen() {
 
   const router = useRouter();
   const API_URL = useMemo(() => process.env.EXPO_PUBLIC_BACKEND_URL, []);
-  const DRIVER_ID = driver?.idNumber;
+
+  // Suppose you stored driver ID in AsyncStorage or context
+  const DRIVER_ID = driver?.idNumber; // Replace 12345 with fallback or retrieved ID
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [driverRes, dispatchRes, tripRes] = await Promise.all([
-          fetch(`${API_URL}/${DRIVER_ID}`),
-          fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/admin/dispatches`),
-          fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/admin/trips`),
+        setLoading(true);
+
+        // ✅ Fetch driver details first
+        const driverRes = await fetch(`${API_URL}/driver/${DRIVER_ID}`);
+        if (!driverRes.ok) throw new Error("Failed to load driver");
+        const driverData: Driver = await driverRes.json();
+        setDriver(driverData);
+
+        // ✅ Fetch driver-specific dispatches & trips
+        const [dispatchRes, tripRes] = await Promise.all([
+          fetch(`${API_URL}/admin/drivers/${DRIVER_ID}/dispatches`),
+          fetch(`${API_URL}/admin/drivers/${DRIVER_ID}/trips`),
         ]);
 
-        if (driverRes.ok) {
-          const driverData: Driver = await driverRes.json();
-          setDriver(driverData);
-        }
+        if (!dispatchRes.ok || !tripRes.ok)
+          throw new Error("Failed to load driver data");
 
         const dispatchData: Dispatch[] = await dispatchRes.json();
         const tripData: Trip[] = await tripRes.json();
+
         setDispatches(dispatchData);
         setTrips(tripData);
       } catch (err) {
-        console.error("Error fetching data:", err);
+        console.error("Error fetching driver data:", err);
+        Alert.alert("Error", "Unable to fetch your data. Try again later.");
       } finally {
         setLoading(false);
       }
     };
+
     fetchData();
   }, [API_URL, DRIVER_ID]);
 
-  // location update logic unchanged
+  // 🛰️ Location tracking
   useEffect(() => {
-    let locationInterval: number | undefined; // ✅ React Native returns number, not Timeout
+    let locationInterval: number | undefined;
 
     const startTracking = async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -94,7 +105,7 @@ export default function HomeScreen() {
           const activeTrip = trips.find((t) => t.status !== "completed");
           if (activeTrip) {
             await fetch(
-              `${process.env.EXPO_PUBLIC_BACKEND_URL}/admin/trips/${activeTrip.id}/location`,
+              `${API_URL}/admin/trips/${activeTrip.id}/location`,
               {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -105,6 +116,16 @@ export default function HomeScreen() {
               }
             );
           }
+
+          // Also update driver's own coordinates
+          await fetch(`${API_URL}/driver/${DRIVER_ID}/location`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            }),
+          });
         } catch (err) {
           console.error("Location update failed:", err);
         }
@@ -113,14 +134,12 @@ export default function HomeScreen() {
 
     startTracking();
 
-    // ✅ Clean up properly
     return () => {
       if (locationInterval) clearInterval(locationInterval);
     };
-  }, [trips]);
+  }, [trips, DRIVER_ID, API_URL]);
 
-
-
+  // 🌀 Loading state
   if (loading) {
     return (
       <View style={styles.loader}>
@@ -312,6 +331,7 @@ const styles = StyleSheet.create({
     }),
   },
 });
+
 
 
 
