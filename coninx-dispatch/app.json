@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "coninx-dispatch",
-    "slug": "coninx-dispatch",
+    "name": "coninx",
+    "slug": "coninx",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/coninx-icon.png",

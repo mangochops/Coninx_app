@@ -31,6 +31,7 @@ interface Trip {
 }
 
 interface Driver {
+  id: number;
   firstName: string;
   lastName: string;
   idNumber: number;
@@ -47,7 +48,7 @@ export default function HomeScreen() {
   const API_URL = useMemo(() => process.env.EXPO_PUBLIC_BACKEND_URL, []);
 
   // Suppose you stored driver ID in AsyncStorage or context
-  const DRIVER_ID = driver?.idNumber; // Replace 12345 with fallback or retrieved ID
+  const DRIVER_ID = driver?.id; // Replace 12345 with fallback or retrieved ID
 
   useEffect(() => {
     const fetchData = async () => {
