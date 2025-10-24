@@ -39,7 +39,7 @@ export default function TabLayout() {
       />
 
       {/* 📦 Jobs */}
-      <Tabs.Screen
+      {/* <Tabs.Screen
         name="jobs"
         options={{
           title: "Jobs",
@@ -47,7 +47,7 @@ export default function TabLayout() {
             <IconSymbol size={26} name="briefcase.fill" color={color} />
           ),
         }}
-      />
+      /> */}
 
       {/* 🗺 Map */}
       <Tabs.Screen

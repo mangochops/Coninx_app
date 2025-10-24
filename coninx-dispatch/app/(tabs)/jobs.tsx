@@ -12,7 +12,7 @@ export default function MapScreen() {
   const [loading, setLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
 
-  const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://coninx-backend.onrender.com";
+  const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
   // Haversine formula to calculate distance in km
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
