@@ -38,16 +38,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 📦 Jobs */}
-      {/* <Tabs.Screen
-        name="jobs"
-        options={{
-          title: "Jobs",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="briefcase.fill" color={color} />
-          ),
-        }}
-      /> */}
+
 
       {/* 🗺 Map */}
       <Tabs.Screen

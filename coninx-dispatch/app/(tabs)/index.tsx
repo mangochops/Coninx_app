@@ -12,6 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Loader from "@/components/Loader";
 
 interface Dispatch {
@@ -42,36 +43,51 @@ export default function HomeScreen() {
   const [dispatches, setDispatches] = useState<Dispatch[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [driver, setDriver] = useState<Driver | null>(null);
+  const [driverId, setDriverId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const router = useRouter();
   const API_URL = useMemo(() => process.env.EXPO_PUBLIC_BACKEND_URL, []);
 
-  // Suppose you stored driver ID in AsyncStorage or context
-  const DRIVER_ID = driver?.id; // Replace 12345 with fallback or retrieved ID
-
+  // ✅ Load driverId from AsyncStorage
   useEffect(() => {
+    const loadDriverId = async () => {
+      const storedId = await AsyncStorage.getItem("driverId");
+      console.log("Loaded driverId from storage:", storedId);
+
+      if (!storedId) {
+        Alert.alert("Login required", "Please log in again.");
+        router.replace("/login");
+        return;
+      }
+      setDriverId(storedId);
+    };
+    loadDriverId();
+  }, [router]);
+
+  // ✅ Fetch driver + dispatch data
+  useEffect(() => {
+    if (!driverId) return;
+
     const fetchData = async () => {
       try {
         setLoading(true);
 
-        // ✅ Fetch driver details first
-        const driverRes = await fetch(`${API_URL}/driver/${DRIVER_ID}`);
+        const driverRes = await fetch(`${API_URL}/driver/${driverId}`);
         if (!driverRes.ok) throw new Error("Failed to load driver");
-        const driverData: Driver = await driverRes.json();
+        const driverData = await driverRes.json();
         setDriver(driverData);
 
-        // ✅ Fetch driver-specific dispatches & trips
         const [dispatchRes, tripRes] = await Promise.all([
-          fetch(`${API_URL}/admin/drivers/${DRIVER_ID}/dispatches`),
-          fetch(`${API_URL}/admin/drivers/${DRIVER_ID}/trips`),
+          fetch(`${API_URL}/admin/drivers/${driverId}/dispatches`),
+          fetch(`${API_URL}/admin/drivers/${driverId}/trips`),
         ]);
 
         if (!dispatchRes.ok || !tripRes.ok)
           throw new Error("Failed to load driver data");
 
-        const dispatchData: Dispatch[] = await dispatchRes.json();
-        const tripData: Trip[] = await tripRes.json();
+        const dispatchData = await dispatchRes.json();
+        const tripData = await tripRes.json();
 
         setDispatches(dispatchData);
         setTrips(tripData);
@@ -84,10 +100,12 @@ export default function HomeScreen() {
     };
 
     fetchData();
-  }, [API_URL, DRIVER_ID]);
+  }, [API_URL, driverId]);
 
-  // 🛰️ Location tracking
+  // ✅ Location tracking
   useEffect(() => {
+    if (!driverId) return;
+
     let locationInterval: number | undefined;
 
     const startTracking = async () => {
@@ -105,21 +123,18 @@ export default function HomeScreen() {
 
           const activeTrip = trips.find((t) => t.status !== "completed");
           if (activeTrip) {
-            await fetch(
-              `${API_URL}/admin/trips/${activeTrip.id}/location`,
-              {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  latitude: loc.coords.latitude,
-                  longitude: loc.coords.longitude,
-                }),
-              }
-            );
+            await fetch(`${API_URL}/admin/trips/${activeTrip.id}/location`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+              }),
+            });
           }
 
-          // Also update driver's own coordinates
-          await fetch(`${API_URL}/driver/${DRIVER_ID}/location`, {
+          // ✅ Update driver location
+          await fetch(`${API_URL}/driver/${driverId}/location`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -130,7 +145,7 @@ export default function HomeScreen() {
         } catch (err) {
           console.error("Location update failed:", err);
         }
-      }, 10000); // every 10 seconds
+      }, 10000);
     };
 
     startTracking();
@@ -138,9 +153,8 @@ export default function HomeScreen() {
     return () => {
       if (locationInterval) clearInterval(locationInterval);
     };
-  }, [trips, DRIVER_ID, API_URL]);
+  }, [trips, driverId, API_URL]);
 
-  // 🌀 Loading state
   if (loading) {
     return (
       <View style={styles.loader}>
@@ -235,16 +249,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 50,
   },
-  welcome: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#1f2937",
-  },
-  subtitle: {
-    fontSize: 15,
-    color: "#6b7280",
-    marginBottom: 20,
-  },
+  welcome: { fontSize: 26, fontWeight: "700", color: "#1f2937" },
+  subtitle: { fontSize: 15, color: "#6b7280", marginBottom: 20 },
   card: {
     flexDirection: "row",
     alignItems: "center",
@@ -253,32 +259,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 20,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#111827",
-  },
-  cardSubtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
+  cardTitle: { fontSize: 18, fontWeight: "600", color: "#111827" },
+  cardSubtitle: { fontSize: 14, color: "#6b7280" },
   assignmentCard: {
     backgroundColor: "#fff",
     padding: 18,
     borderRadius: 16,
     marginBottom: 25,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 12,
-    color: "#1f2937",
-  },
-  assignmentText: {
-    fontSize: 15,
-    marginBottom: 6,
-    color: "#374151",
-  },
+  sectionTitle: { fontSize: 20, fontWeight: "700", marginBottom: 12, color: "#1f2937" },
+  assignmentText: { fontSize: 15, marginBottom: 6, color: "#374151" },
   startButton: {
     marginTop: 14,
     backgroundColor: "#eec332",
@@ -286,11 +276,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-  startButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  startButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   tripItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -299,39 +285,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
   },
-  tripText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#111827",
-  },
-  tripStatus: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  noDispatch: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginBottom: 25,
-  },
-  loader: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  tripText: { fontSize: 16, fontWeight: "500", color: "#111827" },
+  tripStatus: { fontSize: 14, fontWeight: "600" },
+  noDispatch: { fontSize: 14, color: "#6b7280", marginBottom: 25 },
+  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
   shadow: {
     ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 3,
-      },
+      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6 },
+      android: { elevation: 3 },
     }),
   },
 });
+
+
 
 
 

@@ -44,30 +44,32 @@ export default function LoginScreen() {
       }
 
       const data = await response.json();
+      console.log("Login response:", data);
 
-      // ✅ Save the driver ID
-      if (data.driverId) {
-        await AsyncStorage.setItem("idNumber", String(data.driverId));
+      // ✅ Use backend's "id" field, not "driverId"
+      if (data.id) {
+        await AsyncStorage.setItem("driverId", String(data.id));
+        console.log("Saved driverId:", data.id);
+      } else {
+        console.warn("No 'id' found in backend response");
       }
 
-      // ✅ Show modal or message
       setSuccessMessage("Login successful!");
       setSuccessVisible(true);
 
-      // ⏳ Delay before redirect to allow UI update
+      // Small delay for modal visibility, then redirect
       setTimeout(() => {
-        router.replace("/(tabs)"); // navigate to tabs root (typed route)
+        router.replace("/(tabs)");
       }, 1200);
     } catch (err) {
       console.error("Login error:", err);
       const errorMessage =
-        err instanceof Error ? err.message : typeof err === "string" ? err : "Something went wrong";
+        err instanceof Error ? err.message : "Something went wrong";
       Alert.alert("Login Failed", errorMessage);
     } finally {
       setLoading(false);
     }
   };
-
 
   return (
     <KeyboardAvoidingView
@@ -188,6 +190,7 @@ const styles = StyleSheet.create({
   },
   link: { color: "#007AFF", fontWeight: "600" },
 });
+
 
 
 
