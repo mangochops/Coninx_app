@@ -1,7 +1,18 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View, StyleSheet, ActivityIndicator } from "react-native";
-import { WebView } from "react-native-webview";
-import { useLocalSearchParams } from "expo-router";
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  Text,
+  Alert,
+  TextInput,
+  TouchableOpacity,
+  Modal,
+} from "react-native";
+import MapView, { Marker, Polyline } from "react-native-maps";
+import { useLocalSearchParams, router } from "expo-router";
+
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 export default function MapScreen() {
   const rawParams = useLocalSearchParams();
@@ -13,14 +24,24 @@ export default function MapScreen() {
     : rawParams.dispatchId;
 
   const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [destCoords, setDestCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [routeCoords, setRouteCoords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const webViewRef = useRef<WebView>(null);
+  const [eta, setEta] = useState<string | null>(null);
+  const [distance, setDistance] = useState<string | null>(null);
 
-  // 🔁 Poll driver location every 5 seconds
+  const [otpModalVisible, setOtpModalVisible] = useState(false);
+  const [receiverPhone, setReceiverPhone] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpStage, setOtpStage] = useState<"phone" | "code">("phone");
+  const [loadingAction, setLoadingAction] = useState(false);
+
+  const mapRef = useRef<MapView>(null);
+
+  /** 🔁 Poll driver location every 5s */
   useEffect(() => {
     if (!dispatchId) return;
-    let interval: any;
+    let interval: ReturnType<typeof setInterval>;
 
     const fetchDriverLocation = async () => {
       try {
@@ -28,30 +49,35 @@ export default function MapScreen() {
         const data = await res.json();
         if (data.latitude && data.longitude) {
           setDriverLocation({ latitude: data.latitude, longitude: data.longitude });
-          setLoading(false);
         }
       } catch (err) {
         console.log("Driver location fetch error:", err);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchDriverLocation();
     interval = setInterval(fetchDriverLocation, 5000);
-
     return () => clearInterval(interval);
   }, [dispatchId]);
 
-  // 🎯 Fetch destination coordinates once
+  /** 🎯 Geocode destination once */
   useEffect(() => {
     if (!destination) return;
     const fetchDest = async () => {
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destination)}`
+          `https://maps.googleapis.com/maps/api/geocoding/json?address=${encodeURIComponent(
+            destination
+          )}&key=${process.envGOOGLE_MAPS_API_KEY}`
         );
         const data = await res.json();
-        if (data.length > 0) {
-          setDestCoords({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+        if (data.results && data.results.length > 0) {
+          const loc = data.results[0].geometry.location;
+          setDestCoords({ latitude: loc.lat, longitude: loc.lng });
+        } else {
+          Alert.alert("Error", "Destination not found");
         }
       } catch (err) {
         console.log("Destination fetch error:", err);
@@ -60,188 +86,287 @@ export default function MapScreen() {
     fetchDest();
   }, [destination]);
 
-  // 🚀 Send updates to WebView
+  /** 🚗 Fetch route + ETA once both coords are known */
   useEffect(() => {
-    if (webViewRef.current && driverLocation && destCoords) {
-      webViewRef.current.postMessage(JSON.stringify({ driverLocation, destCoords }));
-    }
+    if (!driverLocation || !destCoords) return;
+    const fetchRoute = async () => {
+      try {
+        const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${driverLocation.latitude},${driverLocation.longitude}&destination=${destCoords.latitude},${destCoords.longitude}&key=${GOOGLE_MAPS_API_KEY}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.routes.length > 0) {
+          const route = data.routes[0];
+          const points = decodePolyline(route.overview_polyline.points);
+          setRouteCoords(points);
+
+          const leg = route.legs[0];
+          setEta(leg.duration.text);
+          setDistance(leg.distance.text);
+
+          mapRef.current?.fitToCoordinates(points, {
+            edgePadding: { top: 80, bottom: 80, left: 80, right: 80 },
+            animated: true,
+          });
+        } else {
+          Alert.alert("Error", "No route found");
+        }
+      } catch (err) {
+        console.log("Route fetch error:", err);
+      }
+    };
+    fetchRoute();
   }, [driverLocation, destCoords]);
 
-  // 🌍 Leaflet HTML
-  const leafletHTML = `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <style>
-      html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; }
-      .eta-box {
-        position: absolute;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(255,255,255,0.9);
-        padding: 10px 16px;
-        border-radius: 8px;
-        font-size: 14px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        z-index: 999;
-      }
-      .car-icon {
-        transform-origin: center;
-        transition: transform 0.5s linear;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="map"></div>
-    <div class="eta-box" id="etaBox">Fetching route...</div>
+  /** Decode Google polyline */
+  const decodePolyline = (t: string) => {
+    let points: any[] = [];
+    let index = 0,
+      lat = 0,
+      lng = 0;
 
-    <script>
-      var map = L.map('map').setView([0,0], 13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-      }).addTo(map);
+    while (index < t.length) {
+      let b, shift = 0, result = 0;
+      do {
+        b = t.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlat = result & 1 ? ~(result >> 1) : result >> 1;
+      lat += dlat;
 
-      var driverMarker, destMarker, routeLine, cachedRoute = null;
-      var lastLatLng = null;
+      shift = 0;
+      result = 0;
+      do {
+        b = t.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlng = result & 1 ? ~(result >> 1) : result >> 1;
+      lng += dlng;
 
-      // Calculate heading
-      function computeHeading(lat1, lon1, lat2, lon2) {
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
-        const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180)
-                  - Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
-        return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-      }
+      points.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+    }
+    return points;
+  };
 
-      // Smooth transition
-      function interpolateLatLng(start, end, fraction) {
-        const lat = start.lat + (end.lat - start.lat) * fraction;
-        const lng = start.lng + (end.lng - start.lng) * fraction;
-        return { lat, lng };
-      }
-
-      async function smoothMoveMarker(marker, start, end, duration) {
-        const steps = 60; // smoother animation
-        const interval = duration / steps;
-        let currentStep = 0;
-
-        const animate = setInterval(() => {
-          currentStep++;
-          const fraction = currentStep / steps;
-          const newPos = interpolateLatLng(start, end, fraction);
-          marker.setLatLng([newPos.lat, newPos.lng]);
-
-          if (currentStep >= steps) clearInterval(animate);
-        }, interval);
-      }
-
-      async function fetchRoute(start, end) {
-        if (cachedRoute) return cachedRoute;
-        const url = \`https://routing.openstreetmap.de/routed-car/route/v1/driving/\${start.lng},\${start.lat};\${end.lng},\${end.lat}?overview=full&geometries=geojson\`;
-
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(url, { signal: controller.signal }).catch(() => null);
-        clearTimeout(timeout);
-
-        if (!res) {
-          document.getElementById('etaBox').innerHTML = '⚠️ Route request timed out. Try again.';
-          return null;
-        }
-
-        const data = await res.json();
-        if (data.routes && data.routes.length > 0) {
-          cachedRoute = data.routes[0];
-          return cachedRoute;
-        } else {
-          document.getElementById('etaBox').innerHTML = '⚠️ No route found.';
-        }
-        return null;
-      }
-
-      document.addEventListener("message", async function(event) {
-        const data = JSON.parse(event.data);
-        if (!data.driverLocation || !data.destCoords) return;
-
-        const { latitude, longitude } = data.driverLocation;
-        const { lat: destLat, lng: destLng } = data.destCoords;
-        const currentLatLng = { lat: latitude, lng: longitude };
-
-        if (!lastLatLng) lastLatLng = currentLatLng;
-        const heading = computeHeading(lastLatLng.lat, lastLatLng.lng, latitude, longitude);
-
-        // Driver marker
-        if (!driverMarker) {
-          const carIcon = L.divIcon({
-            html: '<img src="https://cdn-icons-png.flaticon.com/512/447/447031.png" width="35" height="35" class="car-icon" id="carIcon"/>',
-            iconSize: [35, 35],
-            className: ''
-          });
-          driverMarker = L.marker([latitude, longitude], { icon: carIcon }).addTo(map);
-        } else {
-          smoothMoveMarker(driverMarker, lastLatLng, currentLatLng, 2000); // 2s smooth move
-          const iconEl = document.getElementById('carIcon');
-          if (iconEl) iconEl.style.transform = 'rotate(' + heading + 'deg)';
-        }
-
-        // Destination marker
-        if (!destMarker) {
-          destMarker = L.marker([destLat, destLng], {
-            icon: L.icon({
-              iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
-              iconSize: [35, 35],
-              iconAnchor: [17, 34]
-            })
-          }).addTo(map).bindPopup("Destination");
-        }
-
-        // Fetch route once
-        if (!cachedRoute) {
-          const route = await fetchRoute({ lat: latitude, lng: longitude }, { lat: destLat, lng: destLng });
-          if (route) {
-            const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
-            routeLine = L.polyline(coords, { color: '#2563eb', weight: 5 }).addTo(map);
-
-            const km = (route.distance / 1000).toFixed(1);
-            const mins = Math.round(route.duration / 60);
-            document.getElementById('etaBox').innerHTML = \`📍 ETA: \${mins} min | Distance: \${km} km\`;
-
-            map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
-          }
-        }
-
-        lastLatLng = currentLatLng;
+  /** 🔑 Send OTP */
+  const handleSendOTP = async () => {
+    if (!receiverPhone.trim()) {
+      return Alert.alert("Missing Number", "Please enter the receiver’s phone number.");
+    }
+    setLoadingAction(true);
+    try {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/dispatches/${dispatchId}/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: receiverPhone }),
       });
-    </script>
-  </body>
-  </html>
-  `;
+      const data = await res.json();
+      if (res.ok) {
+        Alert.alert("OTP Sent", "An OTP has been sent to the provided phone number.");
+        setOtpStage("code");
+      } else {
+        Alert.alert("Error", data.message || "Failed to send OTP");
+      }
+    } catch (err) {
+      console.log("Send OTP error:", err);
+      Alert.alert("Error", "Failed to send OTP");
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  /** ✅ Verify OTP */
+  const handleVerifyOTP = async () => {
+    if (!otpCode.trim()) return Alert.alert("Error", "Enter the OTP code");
+    setLoadingAction(true);
+    try {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/dispatches/${dispatchId}/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: otpCode }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        Alert.alert("Trip Completed ✅", "OTP Verified successfully.", [
+          { text: "OK", onPress: () => router.replace("/(tabs)") },
+        ]);
+        setOtpModalVisible(false);
+      } else {
+        Alert.alert("Invalid OTP", data.message || "Please try again.");
+      }
+    } catch {
+      Alert.alert("Error", "Failed to verify OTP");
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <WebView ref={webViewRef} originWhitelist={["*"]} source={{ html: leafletHTML }} style={{ flex: 1 }} />
-      {loading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#2563eb" />
+      <MapView
+        ref={mapRef}
+        provider="google"
+        style={styles.map}
+        initialRegion={{
+          latitude: driverLocation?.latitude || 0,
+          longitude: driverLocation?.longitude || 0,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        }}
+      >
+        {driverLocation && (
+          <Marker coordinate={driverLocation} title="Driver" pinColor="blue" />
+        )}
+        {destCoords && (
+          <Marker coordinate={destCoords} title="Destination" pinColor="red" />
+        )}
+        {routeCoords.length > 0 && (
+          <Polyline coordinates={routeCoords} strokeColor="#2563eb" strokeWidth={5} />
+        )}
+      </MapView>
+
+      {/* ETA Box */}
+      {(eta || distance) && (
+        <View style={styles.etaBox}>
+          <Text style={styles.etaText}>📍 ETA: {eta} | Distance: {distance}</Text>
         </View>
       )}
+
+      {/* End Trip Button */}
+      <TouchableOpacity style={styles.endTripButton} onPress={() => setOtpModalVisible(true)}>
+        <Text style={styles.endTripText}>End Trip</Text>
+      </TouchableOpacity>
+
+      {/* OTP Modal */}
+      <Modal transparent visible={otpModalVisible} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {otpStage === "phone" ? (
+              <>
+                <Text style={styles.modalTitle}>Receiver’s Phone Number</Text>
+                <TextInput
+                  style={styles.otpInput}
+                  placeholder="e.g. +254712345678"
+                  keyboardType="phone-pad"
+                  value={receiverPhone}
+                  onChangeText={setReceiverPhone}
+                />
+                <TouchableOpacity
+                  style={[styles.verifyButton, loadingAction && { opacity: 0.6 }]}
+                  onPress={handleSendOTP}
+                  disabled={loadingAction}
+                >
+                  <Text style={styles.verifyText}>
+                    {loadingAction ? "Sending..." : "Send OTP"}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>Enter OTP to Confirm Delivery</Text>
+                <TextInput
+                  style={styles.otpInput}
+                  placeholder="Enter OTP"
+                  keyboardType="numeric"
+                  value={otpCode}
+                  onChangeText={setOtpCode}
+                />
+                <TouchableOpacity
+                  style={[styles.verifyButton, loadingAction && { opacity: 0.6 }]}
+                  onPress={handleVerifyOTP}
+                  disabled={loadingAction}
+                >
+                  <Text style={styles.verifyText}>
+                    {loadingAction ? "Verifying..." : "Verify OTP"}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity
+              onPress={() => {
+                setOtpModalVisible(false);
+                setOtpStage("phone");
+                setOtpCode("");
+                setReceiverPhone("");
+              }}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.7)",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
+  map: { flex: 1 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  etaBox: {
+    position: "absolute",
+    top: 40,
+    alignSelf: "center",
+    backgroundColor: "rgba(255,255,255,0.95)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    elevation: 3,
   },
+  etaText: { fontWeight: "600", color: "#2563eb" },
+  endTripButton: {
+    position: "absolute",
+    bottom: 40,
+    alignSelf: "center",
+    backgroundColor: "#dc2626",
+    paddingHorizontal: 30,
+    paddingVertical: 14,
+    borderRadius: 30,
+    elevation: 5,
+  },
+  endTripText: { color: "white", fontWeight: "700", fontSize: 16 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "85%",
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 20,
+    alignItems: "center",
+  },
+  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 15 },
+  otpInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    width: "80%",
+    padding: 10,
+    textAlign: "center",
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  verifyButton: {
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  verifyText: { color: "white", fontWeight: "600" },
+  cancelText: { color: "#dc2626", marginTop: 10 },
 });
 
 
