@@ -19,16 +19,16 @@ interface Dispatch {
   id: number;
   location: string;
   recipient: string;
-  invoice: string;
+  invoice: number;
 }
 
 interface Trip {
   id: number;
   dispatch_id: number;
-  destination?: string;
-  status: "pending" | "in_progress" | "completed" | string;
-  latitude?: number;
-  longitude?: number;
+  destination: string;
+  status: "started" | "completed" | string;
+  latitude: number;
+  longitude: number;
 }
 
 interface Driver {
@@ -49,7 +49,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const API_URL = useMemo(() => process.env.EXPO_PUBLIC_BACKEND_URL, []);
 
-  // ✅ Load driverId from AsyncStorage
+  // Load driverId from AsyncStorage
   useEffect(() => {
     const loadDriverId = async () => {
       const storedId = await AsyncStorage.getItem("driverId");
@@ -65,7 +65,7 @@ export default function HomeScreen() {
     loadDriverId();
   }, [router]);
 
-  // ✅ Fetch driver + dispatch data
+  // Fetch driver, dispatches, and trips data
   useEffect(() => {
     if (!driverId) return;
 
@@ -78,9 +78,10 @@ export default function HomeScreen() {
         const driverData = await driverRes.json();
         setDriver(driverData);
 
+        // Fetch dispatches and trips in parallel
         const [dispatchRes, tripRes] = await Promise.all([
           fetch(`${API_URL}/admin/drivers/${driverId}/dispatches`),
-          fetch(`${API_URL}/admin/drivers/${driverId}/trips`),
+          fetch(`${API_URL}/admin/drivers/${driverId}/trips`), // Updated to fetch driver-specific trips
         ]);
 
         if (!dispatchRes.ok || !tripRes.ok)
@@ -90,7 +91,7 @@ export default function HomeScreen() {
         const tripData = await tripRes.json();
 
         setDispatches(dispatchData);
-        setTrips(tripData);
+        setTrips(tripData); // Set trips from driver-specific endpoint
       } catch (err) {
         console.error("Error fetching driver data:", err);
         Alert.alert("Error", "Unable to fetch your data. Try again later.");
@@ -102,7 +103,7 @@ export default function HomeScreen() {
     fetchData();
   }, [API_URL, driverId]);
 
-  // ✅ Location tracking
+  // Location tracking
   useEffect(() => {
     if (!driverId) return;
 
@@ -133,7 +134,6 @@ export default function HomeScreen() {
             });
           }
 
-          // ✅ Update driver location
           await fetch(`${API_URL}/driver/${driverId}/location`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -218,7 +218,18 @@ export default function HomeScreen() {
         data={trips}
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
-          <View style={[styles.tripItem, styles.shadow]}>
+          <TouchableOpacity
+            style={[styles.tripItem, styles.shadow]}
+            onPress={() =>
+              router.push({
+                pathname: "/map",
+                params: {
+                  dispatchId: item.dispatch_id,
+                  destination: item.destination,
+                },
+              })
+            }
+          >
             <Ionicons name="location-outline" size={22} color="#eec332" />
             <View style={{ marginLeft: 10 }}>
               <Text style={styles.tripText}>
@@ -235,7 +246,7 @@ export default function HomeScreen() {
                 {item.status}
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
       />
     </View>
@@ -296,7 +307,6 @@ const styles = StyleSheet.create({
     }),
   },
 });
-
 
 
 

@@ -53,5 +53,10 @@
       }
     },
     "owner": "eng.willy"
+  },
+  "permissions": {
+    "location": {
+      "foreground": "Allow location access to track the driver."
+    }
   }
 }
