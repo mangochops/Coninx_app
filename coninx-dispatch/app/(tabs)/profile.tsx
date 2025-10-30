@@ -94,7 +94,7 @@ export default function ProfileScreen() {
 
       {/* Trips Section */}
       <View style={styles.tripsCard}>
-        <Text style={styles.sectionTitle}>My Trips</Text>
+        <Text style={styles.sectionTitle}>History</Text>
         {trips.length === 0 ? (
           <Text style={styles.noTrips}>No active trips found.</Text>
         ) : (

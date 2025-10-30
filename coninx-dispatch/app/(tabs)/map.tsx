@@ -9,9 +9,8 @@ import {
   TouchableOpacity,
   Modal,
 } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
 import { useLocalSearchParams, router } from "expo-router";
-import * as Location from "expo-location"; // Import expo-location for permission handling
+import MapView, { Marker, Polyline } from "react-native-maps"; // Direct import for mobile-only
 import EventSource from "react-native-sse"; // For SSE support
 
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -42,31 +41,14 @@ export default function MapScreen() {
   const [otpCode, setOtpCode] = useState("");
   const [otpStage, setOtpStage] = useState<"phone" | "code">("phone");
   const [loadingAction, setLoadingAction] = useState(false);
-  const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
 
   const mapRef = useRef<MapView>(null);
   const sseRef = useRef<EventSource | null>(null);
-
-  // Request location permissions on mount
-  useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Permission Denied",
-          "Location permission is required to track the driver.",
-          [{ text: "OK", onPress: () => router.back() }]
-        );
-        setLocationPermission(false);
-        return;
-      }
-      setLocationPermission(true);
-    })();
-  }, []);
+  const hasFetchedRoute = useRef(false);
 
   // Poll trip location every 5s (updated to use /dispatches/{dispatchId}/trips)
   useEffect(() => {
-    if (!dispatchId || !locationPermission) return;
+    if (!dispatchId) return;
     let interval: ReturnType<typeof setInterval>;
 
     const fetchTripLocation = async () => {
@@ -76,26 +58,31 @@ export default function MapScreen() {
         );
         const trips = await res.json();
         if (trips.length > 0 && trips[0].latitude && trips[0].longitude) {
-          setDriverLocation({
+          const newLocation = {
             latitude: trips[0].latitude,
             longitude: trips[0].longitude,
-          });
+          };
+          setDriverLocation(newLocation);
+
+          // Only hide loading once we have a valid (non-zero) location
+          if (newLocation.latitude !== 0 && newLocation.longitude !== 0) {
+            setLoading(false);
+          }
         }
       } catch (err) {
         console.log("Trip location fetch error:", err);
-      } finally {
-        setLoading(false);
+        // Optionally hide loading after a few failed attempts, but for now keep waiting
       }
     };
 
     fetchTripLocation();
     interval = setInterval(fetchTripLocation, 5000);
     return () => clearInterval(interval);
-  }, [dispatchId, locationPermission]);
+  }, [dispatchId]);
 
   // Set up SSE for real-time location updates
   useEffect(() => {
-    if (!dispatchId || !locationPermission) return;
+    if (!dispatchId) return;
 
     const sseUrl = `${process.env.EXPO_PUBLIC_BACKEND_URL}/events`;
     sseRef.current = new EventSource(sseUrl);
@@ -124,7 +111,22 @@ export default function MapScreen() {
     return () => {
       sseRef.current?.close();
     };
-  }, [dispatchId, locationPermission]);
+  }, [dispatchId]);
+
+  // Animate map to follow driver's location updates
+  useEffect(() => {
+    if (!driverLocation || !mapRef.current) return;
+
+    mapRef.current.animateToRegion(
+      {
+        latitude: driverLocation.latitude,
+        longitude: driverLocation.longitude,
+        latitudeDelta: 0.02, // Tight zoom to focus on driver
+        longitudeDelta: 0.02,
+      },
+      1000 // 1 second animation
+    );
+  }, [driverLocation]);
 
   // Geocode destination once
   useEffect(() => {
@@ -150,9 +152,10 @@ export default function MapScreen() {
     fetchDest();
   }, [destination]);
 
-  // Fetch route + ETA once both coords are known
+  // Fetch route + ETA once both coords are known (only initial fetch)
   useEffect(() => {
-    if (!driverLocation || !destCoords) return;
+    if (!driverLocation || !destCoords || hasFetchedRoute.current) return;
+
     const fetchRoute = async () => {
       try {
         const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${driverLocation.latitude},${driverLocation.longitude}&destination=${destCoords.latitude},${destCoords.longitude}&key=${GOOGLE_MAPS_API_KEY}`;
@@ -168,10 +171,15 @@ export default function MapScreen() {
           setEta(leg.duration.text);
           setDistance(leg.distance.text);
 
-          mapRef.current?.fitToCoordinates(points, {
-            edgePadding: { top: 80, bottom: 80, left: 80, right: 80 },
-            animated: true,
-          });
+          // Initial fit to show the full route
+          if (mapRef.current && points.length > 0) {
+            mapRef.current.fitToCoordinates(points, {
+              edgePadding: { top: 100, bottom: 100, left: 100, right: 100 },
+              animated: false, // Instant for initial load
+            });
+          }
+
+          hasFetchedRoute.current = true;
         } else {
           Alert.alert("Error", "No route found");
         }
@@ -274,22 +282,16 @@ export default function MapScreen() {
     }
   };
 
-  if (loading || locationPermission === null) {
+  if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#2563eb" />
+        <Text style={{ marginTop: 10 }}>Waiting for driver location...</Text>
       </View>
     );
   }
 
-  if (locationPermission === false) {
-    return (
-      <View style={styles.center}>
-        <Text>Location permission denied. Please enable it to track the driver.</Text>
-      </View>
-    );
-  }
-
+  // Native-only map rendering
   return (
     <View style={styles.container}>
       <MapView
@@ -391,9 +393,10 @@ export default function MapScreen() {
   );
 }
 
+// Styles unchanged
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  map: { flex: 1 },
+  map: { flex: 1, width: '100%', height: '100%' },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   etaBox: {
     position: "absolute",

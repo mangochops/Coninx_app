@@ -26,9 +26,10 @@ interface Trip {
   id: number;
   dispatch_id: number;
   destination: string;
-  status: "started" | "completed" | string;
+  status: "pending" | "completed" | string;
   latitude: number;
   longitude: number;
+  recipient_name: string;
 }
 
 interface Driver {
@@ -190,9 +191,7 @@ export default function HomeScreen() {
           <Text style={styles.assignmentText}>
             👤 Client: {nextDispatch.recipient}
           </Text>
-          <Text style={styles.assignmentText}>
-            🧾 Invoice No.: INV {nextDispatch.invoice}
-          </Text>
+
 
           <TouchableOpacity
             style={styles.startButton}
@@ -213,7 +212,7 @@ export default function HomeScreen() {
         <Text style={styles.noDispatch}>No upcoming dispatches</Text>
       )}
 
-      <Text style={styles.sectionTitle}>Recent Trips</Text>
+      <Text style={styles.sectionTitle}>Your drop-offs</Text>
       <FlatList
         data={trips}
         keyExtractor={(item) => item.id.toString()}
@@ -232,8 +231,12 @@ export default function HomeScreen() {
           >
             <Ionicons name="location-outline" size={22} color="#eec332" />
             <View style={{ marginLeft: 10 }}>
+
               <Text style={styles.tripText}>
-                Dispatch #{item.dispatch_id} → {item.destination || "Unknown"}
+                📍 Dropoff: {item.destination}
+              </Text>
+              <Text style={styles.tripText}>
+                👤 Client: {item.recipient_name}
               </Text>
               <Text
                 style={[
