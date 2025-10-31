@@ -167,6 +167,7 @@ export default function HomeScreen() {
 
   const nextDispatch = dispatches.length > 0 ? dispatches[0] : null;
 
+
   return (
     <View style={styles.container}>
       <Text style={styles.welcome}>Hi, {driver?.firstName || "Driver"} 👋</Text>
@@ -184,7 +185,7 @@ export default function HomeScreen() {
 
       {nextDispatch ? (
         <View style={[styles.assignmentCard, styles.shadow]}>
-          <Text style={styles.sectionTitle}>Next Dispatch</Text>
+          <Text style={styles.sectionTitle}>Next Trip</Text>
           <Text style={styles.assignmentText}>
             📍 Dropoff: {nextDispatch.location}
           </Text>

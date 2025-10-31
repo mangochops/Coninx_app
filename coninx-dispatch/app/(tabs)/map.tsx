@@ -10,10 +10,30 @@ import {
   Modal,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
-import MapView, { Marker, Polyline } from "react-native-maps"; // Direct import for mobile-only
-import EventSource from "react-native-sse"; // For SSE support
+import MapView, { Marker, Polyline } from "react-native-maps";
+import EventSource from "react-native-sse";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+
+interface Trip {
+  id: number;
+  dispatch_id: number;
+  destination: string;
+  status: string;
+  latitude: number;
+  longitude: number;
+  recipient_name: string;
+}
+
+interface DropoffMarker {
+  latitude: number;
+  longitude: number;
+  title: string;
+  description: string;
+  isCurrent?: boolean;
+}
 
 export default function MapScreen() {
   const rawParams = useLocalSearchParams();
@@ -24,15 +44,11 @@ export default function MapScreen() {
     ? rawParams.dispatchId[0]
     : rawParams.dispatchId;
 
-  const [driverLocation, setDriverLocation] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
-  const [destCoords, setDestCoords] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
+  const [driverId, setDriverId] = useState<string | null>(null);
+  const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [destCoords, setDestCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [routeCoords, setRouteCoords] = useState<any[]>([]);
+  const [allDropoffs, setAllDropoffs] = useState<DropoffMarker[]>([]);
   const [loading, setLoading] = useState(true);
   const [eta, setEta] = useState<string | null>(null);
   const [distance, setDistance] = useState<string | null>(null);
@@ -46,32 +62,33 @@ export default function MapScreen() {
   const sseRef = useRef<EventSource | null>(null);
   const hasFetchedRoute = useRef(false);
 
-  // Poll trip location every 5s (updated to use /dispatches/{dispatchId}/trips)
+  // Load driverId
+  useEffect(() => {
+    const loadDriverId = async () => {
+      const storedId = await AsyncStorage.getItem("driverId");
+      if (storedId) setDriverId(storedId);
+    };
+    loadDriverId();
+  }, []);
+
+  // Poll active trip location
   useEffect(() => {
     if (!dispatchId) return;
     let interval: ReturnType<typeof setInterval>;
 
     const fetchTripLocation = async () => {
       try {
-        const res = await fetch(
-          `${process.env.EXPO_PUBLIC_BACKEND_URL}/dispatches/${dispatchId}/trips`
-        );
+        const res = await fetch(`${BACKEND_URL}/dispatches/${dispatchId}/trips`);
         const trips = await res.json();
         if (trips.length > 0 && trips[0].latitude && trips[0].longitude) {
-          const newLocation = {
-            latitude: trips[0].latitude,
-            longitude: trips[0].longitude,
-          };
-          setDriverLocation(newLocation);
-
-          // Only hide loading once we have a valid (non-zero) location
-          if (newLocation.latitude !== 0 && newLocation.longitude !== 0) {
+          const loc = { latitude: trips[0].latitude, longitude: trips[0].longitude };
+          setDriverLocation(loc);
+          if (loc.latitude !== 0 && loc.longitude !== 0) {
             setLoading(false);
           }
         }
       } catch (err) {
         console.log("Trip location fetch error:", err);
-        // Optionally hide loading after a few failed attempts, but for now keep waiting
       }
     };
 
@@ -80,17 +97,15 @@ export default function MapScreen() {
     return () => clearInterval(interval);
   }, [dispatchId]);
 
-  // Set up SSE for real-time location updates
+  // SSE for real-time updates
   useEffect(() => {
     if (!dispatchId) return;
 
-    const sseUrl = `${process.env.EXPO_PUBLIC_BACKEND_URL}/events`;
+    const sseUrl = `${BACKEND_URL}/events`;
     sseRef.current = new EventSource(sseUrl);
 
     sseRef.current.addEventListener("message", (event) => {
       try {
-        // event.data may be string | null (or already an object depending on implementation).
-        // Guard against null and only JSON.parse when it's a string.
         if (!event.data) return;
         const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
         if (data.type === "location_update" && data.trip.dispatch_id === parseInt(dispatchId)) {
@@ -104,31 +119,26 @@ export default function MapScreen() {
       }
     });
 
-    sseRef.current.addEventListener("error", (err) => {
-      console.log("SSE error:", err);
-    });
-
     return () => {
       sseRef.current?.close();
     };
   }, [dispatchId]);
 
-  // Animate map to follow driver's location updates
+  // Animate to driver
   useEffect(() => {
     if (!driverLocation || !mapRef.current) return;
-
     mapRef.current.animateToRegion(
       {
         latitude: driverLocation.latitude,
         longitude: driverLocation.longitude,
-        latitudeDelta: 0.02, // Tight zoom to focus on driver
+        latitudeDelta: 0.02,
         longitudeDelta: 0.02,
       },
-      1000 // 1 second animation
+      1000
     );
   }, [driverLocation]);
 
-  // Geocode destination once
+  // Geocode current destination
   useEffect(() => {
     if (!destination) return;
     const fetchDest = async () => {
@@ -139,20 +149,63 @@ export default function MapScreen() {
           )}&key=${GOOGLE_MAPS_API_KEY}`
         );
         const data = await res.json();
-        if (data.results && data.results.length > 0) {
+        if (data.results?.[0]) {
           const loc = data.results[0].geometry.location;
           setDestCoords({ latitude: loc.lat, longitude: loc.lng });
-        } else {
-          Alert.alert("Error", "Destination not found");
         }
       } catch (err) {
-        console.log("Destination fetch error:", err);
+        console.log("Geocode error:", err);
       }
     };
     fetchDest();
   }, [destination]);
 
-  // Fetch route + ETA once both coords are known (only initial fetch)
+  // Fetch ALL trips for this driver and geocode drop-offs
+  useEffect(() => {
+    if (!driverId) return;
+
+    const fetchAllTrips = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/admin/drivers/${driverId}/trips`);
+        const trips: Trip[] = await res.json();
+
+        const geocodedDropoffs: DropoffMarker[] = [];
+
+        for (const trip of trips) {
+          if (!trip.destination) continue;
+
+          try {
+            const geoRes = await fetch(
+              `https://maps.googleapis.com/maps/api/geocoding/json?address=${encodeURIComponent(
+                trip.destination
+              )}&key=${GOOGLE_MAPS_API_KEY}`
+            );
+            const geoData = await geoRes.json();
+            if (geoData.results?.[0]) {
+              const loc = geoData.results[0].geometry.location;
+              geocodedDropoffs.push({
+                latitude: loc.lat,
+                longitude: loc.lng,
+                title: trip.recipient_name || "Drop-off",
+                description: trip.destination,
+                isCurrent: trip.dispatch_id === parseInt(dispatchId || "0"),
+              });
+            }
+          } catch (err) {
+            console.log(`Geocode failed for ${trip.destination}:`, err);
+          }
+        }
+
+        setAllDropoffs(geocodedDropoffs);
+      } catch (err) {
+        console.log("Fetch trips error:", err);
+      }
+    };
+
+    fetchAllTrips();
+  }, [driverId, dispatchId]);
+
+  // Fetch route to current destination
   useEffect(() => {
     if (!driverLocation || !destCoords || hasFetchedRoute.current) return;
 
@@ -162,26 +215,22 @@ export default function MapScreen() {
         const res = await fetch(url);
         const data = await res.json();
 
-        if (data.routes.length > 0) {
-          const route = data.routes[0];
-          const points = decodePolyline(route.overview_polyline.points);
+        if (data.routes[0]) {
+          const points = decodePolyline(data.routes[0].overview_polyline.points);
           setRouteCoords(points);
 
-          const leg = route.legs[0];
+          const leg = data.routes[0].legs[0];
           setEta(leg.duration.text);
           setDistance(leg.distance.text);
 
-          // Initial fit to show the full route
           if (mapRef.current && points.length > 0) {
             mapRef.current.fitToCoordinates(points, {
-              edgePadding: { top: 100, bottom: 100, left: 100, right: 100 },
-              animated: false, // Instant for initial load
+              edgePadding: { top: 100, left: 100, bottom: 100, right: 100 },
+              animated: false,
             });
           }
 
           hasFetchedRoute.current = true;
-        } else {
-          Alert.alert("Error", "No route found");
         }
       } catch (err) {
         console.log("Route fetch error:", err);
@@ -190,13 +239,9 @@ export default function MapScreen() {
     fetchRoute();
   }, [driverLocation, destCoords]);
 
-  // Decode Google polyline
   const decodePolyline = (t: string) => {
     let points: any[] = [];
-    let index = 0,
-      lat = 0,
-      lng = 0;
-
+    let index = 0, lat = 0, lng = 0;
     while (index < t.length) {
       let b, shift = 0, result = 0;
       do {
@@ -207,8 +252,7 @@ export default function MapScreen() {
       const dlat = result & 1 ? ~(result >> 1) : result >> 1;
       lat += dlat;
 
-      shift = 0;
-      result = 0;
+      shift = 0; result = 0;
       do {
         b = t.charCodeAt(index++) - 63;
         result |= (b & 0x1f) << shift;
@@ -222,61 +266,50 @@ export default function MapScreen() {
     return points;
   };
 
-  // Send OTP
+  // OTP Handlers (unchanged)
   const handleSendOTP = async () => {
-    if (!receiverPhone.trim()) {
-      return Alert.alert("Missing Number", "Please enter the receiver’s phone number.");
-    }
+    if (!receiverPhone.trim()) return Alert.alert("Error", "Enter phone number");
     setLoadingAction(true);
     try {
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/dispatches/${dispatchId}/send-otp`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: receiverPhone }),
-        }
-      );
+      const res = await fetch(`${BACKEND_URL}/dispatches/${dispatchId}/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: receiverPhone }),
+      });
       const data = await res.json();
       if (res.ok) {
-        Alert.alert("OTP Sent", "An OTP has been sent to the provided phone number.");
+        Alert.alert("OTP Sent", "Check the receiver's phone.");
         setOtpStage("code");
       } else {
-        Alert.alert("Error", data.message || "Failed to send OTP");
+        Alert.alert("Error", data.message || "Failed");
       }
     } catch (err) {
-      console.log("Send OTP error:", err);
-      Alert.alert("Error", "Failed to send OTP");
+      Alert.alert("Error", "Network error");
     } finally {
       setLoadingAction(false);
     }
   };
 
-  // Verify OTP
   const handleVerifyOTP = async () => {
-    if (!otpCode.trim()) return Alert.alert("Error", "Enter the OTP code");
+    if (!otpCode.trim()) return Alert.alert("Error", "Enter OTP");
     setLoadingAction(true);
     try {
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/dispatches/${dispatchId}/verify-otp`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: otpCode }),
-        }
-      );
+      const res = await fetch(`${BACKEND_URL}/dispatches/${dispatchId}/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: otpCode }),
+      });
       const data = await res.json();
       if (res.ok) {
-        Alert.alert("Trip Completed ✅", "OTP Verified successfully.", [
+        Alert.alert("Success", "Delivery confirmed!", [
           { text: "OK", onPress: () => router.replace("/(tabs)") },
         ]);
         setOtpModalVisible(false);
       } else {
-        Alert.alert("Invalid OTP", data.message || "Please try again.");
+        Alert.alert("Invalid", data.message || "Wrong OTP");
       }
     } catch (err) {
-      console.log("Verify OTP error:", err);
-      Alert.alert("Error", "Failed to verify OTP");
+      Alert.alert("Error", "Verification failed");
     } finally {
       setLoadingAction(false);
     }
@@ -286,12 +319,11 @@ export default function MapScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#2563eb" />
-        <Text style={{ marginTop: 10 }}>Waiting for driver location...</Text>
+        <Text style={{ marginTop: 10 }}>Loading map & drop-offs...</Text>
       </View>
     );
   }
 
-  // Native-only map rendering
   return (
     <View style={styles.container}>
       <MapView
@@ -305,12 +337,39 @@ export default function MapScreen() {
           longitudeDelta: 0.05,
         }}
       >
+        {/* Driver Marker */}
         {driverLocation && (
-          <Marker coordinate={driverLocation} title="Driver" pinColor="blue" />
+          <Marker
+            coordinate={driverLocation}
+            title="You are here"
+            pinColor="blue"
+          />
         )}
+
+        {/* Current Destination (Red) */}
         {destCoords && (
-          <Marker coordinate={destCoords} title="Destination" pinColor="red" />
+          <Marker
+            coordinate={destCoords}
+            title="Current Drop-off"
+            description={destination}
+            pinColor="red"
+          />
         )}
+
+        {/* All Other Drop-offs (Yellow) */}
+        {allDropoffs
+          .filter((d) => !d.isCurrent)
+          .map((dropoff, i) => (
+            <Marker
+              key={i}
+              coordinate={{ latitude: dropoff.latitude, longitude: dropoff.longitude }}
+              title={dropoff.title}
+              description={dropoff.description}
+              pinColor="orange"
+            />
+          ))}
+
+        {/* Route to Current Destination */}
         {routeCoords.length > 0 && (
           <Polyline coordinates={routeCoords} strokeColor="#2563eb" strokeWidth={5} />
         )}
@@ -319,7 +378,9 @@ export default function MapScreen() {
       {/* ETA Box */}
       {(eta || distance) && (
         <View style={styles.etaBox}>
-          <Text style={styles.etaText}>📍 ETA: {eta} | Distance: {distance}</Text>
+          <Text style={styles.etaText}>
+            ETA: {eta} | {distance}
+          </Text>
         </View>
       )}
 
@@ -337,10 +398,10 @@ export default function MapScreen() {
           <View style={styles.modalContent}>
             {otpStage === "phone" ? (
               <>
-                <Text style={styles.modalTitle}>Receiver’s Phone Number</Text>
+                <Text style={styles.modalTitle}>Receiver Phone</Text>
                 <TextInput
                   style={styles.otpInput}
-                  placeholder="e.g. +254712345678"
+                  placeholder="+254..."
                   keyboardType="phone-pad"
                   value={receiverPhone}
                   onChangeText={setReceiverPhone}
@@ -357,10 +418,10 @@ export default function MapScreen() {
               </>
             ) : (
               <>
-                <Text style={styles.modalTitle}>Enter OTP to Confirm Delivery</Text>
+                <Text style={styles.modalTitle}>Enter OTP</Text>
                 <TextInput
                   style={styles.otpInput}
-                  placeholder="Enter OTP"
+                  placeholder="123456"
                   keyboardType="numeric"
                   value={otpCode}
                   onChangeText={setOtpCode}
@@ -371,7 +432,7 @@ export default function MapScreen() {
                   disabled={loadingAction}
                 >
                   <Text style={styles.verifyText}>
-                    {loadingAction ? "Verifying..." : "Verify OTP"}
+                    {loadingAction ? "Verifying..." : "Verify"}
                   </Text>
                 </TouchableOpacity>
               </>
