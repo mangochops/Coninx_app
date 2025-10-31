@@ -26,7 +26,7 @@ interface Trip {
   id: number;
   dispatch_id: number;
   destination: string;
-  status: "pending" | "completed" | string;
+  status: "pending" | "started" | "completed" | string;
   latitude: number;
   longitude: number;
   recipient_name: string;
@@ -50,12 +50,12 @@ export default function HomeScreen() {
   const router = useRouter();
   const API_URL = useMemo(() => process.env.EXPO_PUBLIC_BACKEND_URL, []);
 
-  // Load driverId from AsyncStorage
+  /* -------------------------------------------------
+   *  Load driverId from storage
+   * ------------------------------------------------- */
   useEffect(() => {
     const loadDriverId = async () => {
       const storedId = await AsyncStorage.getItem("driverId");
-      console.log("Loaded driverId from storage:", storedId);
-
       if (!storedId) {
         Alert.alert("Login required", "Please log in again.");
         router.replace("/login");
@@ -66,7 +66,9 @@ export default function HomeScreen() {
     loadDriverId();
   }, [router]);
 
-  // Fetch driver, dispatches, and trips data
+  /* -------------------------------------------------
+   *  Fetch driver + dispatches + trips
+   * ------------------------------------------------- */
   useEffect(() => {
     if (!driverId) return;
 
@@ -79,10 +81,9 @@ export default function HomeScreen() {
         const driverData = await driverRes.json();
         setDriver(driverData);
 
-        // Fetch dispatches and trips in parallel
         const [dispatchRes, tripRes] = await Promise.all([
           fetch(`${API_URL}/admin/drivers/${driverId}/dispatches`),
-          fetch(`${API_URL}/admin/drivers/${driverId}/trips`), // Updated to fetch driver-specific trips
+          fetch(`${API_URL}/admin/drivers/${driverId}/trips`),
         ]);
 
         if (!dispatchRes.ok || !tripRes.ok)
@@ -92,7 +93,7 @@ export default function HomeScreen() {
         const tripData = await tripRes.json();
 
         setDispatches(dispatchData);
-        setTrips(tripData); // Set trips from driver-specific endpoint
+        setTrips(tripData);
       } catch (err) {
         console.error("Error fetching driver data:", err);
         Alert.alert("Error", "Unable to fetch your data. Try again later.");
@@ -104,11 +105,13 @@ export default function HomeScreen() {
     fetchData();
   }, [API_URL, driverId]);
 
-  // Location tracking
+  /* -------------------------------------------------
+   *  Location tracking (unchanged)
+   * ------------------------------------------------- */
   useEffect(() => {
     if (!driverId) return;
 
-    let locationInterval: number | undefined;
+    let locationInterval: ReturnType<typeof setInterval> | undefined;
 
     const startTracking = async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -146,7 +149,7 @@ export default function HomeScreen() {
         } catch (err) {
           console.error("Location update failed:", err);
         }
-      }, 10000);
+      }, 10_000);
     };
 
     startTracking();
@@ -156,6 +159,9 @@ export default function HomeScreen() {
     };
   }, [trips, driverId, API_URL]);
 
+  /* -------------------------------------------------
+   *  Loading UI
+   * ------------------------------------------------- */
   if (loading) {
     return (
       <View style={styles.loader}>
@@ -165,34 +171,40 @@ export default function HomeScreen() {
     );
   }
 
-  const nextDispatch = dispatches.length > 0 ? dispatches[0] : null;
+  /* -------------------------------------------------
+   *  Determine “Next Trip”
+   * ------------------------------------------------- */
+  const nextTrip = trips.find((t) => t.status !== "completed") ?? null;
 
-
+  /* -------------------------------------------------
+   *  Render
+   * ------------------------------------------------- */
   return (
     <View style={styles.container}>
-      <Text style={styles.welcome}>Hi, {driver?.firstName || "Driver"} 👋</Text>
+      <Text style={styles.welcome}>Hi, {driver?.firstName || "Driver"}</Text>
       <Text style={styles.subtitle}>Here’s your dispatch dashboard</Text>
 
+      {/* STATUS CARD */}
       <View style={[styles.card, styles.shadow]}>
         <Ionicons name="car-outline" size={28} color="#2563eb" />
         <View style={{ marginLeft: 12 }}>
           <Text style={styles.cardTitle}>Status: Online</Text>
           <Text style={styles.cardSubtitle}>
-            {trips.length} trips assigned today
+            {trips.length} trip{trips.length !== 1 ? "s" : ""} assigned today
           </Text>
         </View>
       </View>
 
-      {nextDispatch ? (
+      {/* NEXT TRIP CARD */}
+      {nextTrip ? (
         <View style={[styles.assignmentCard, styles.shadow]}>
           <Text style={styles.sectionTitle}>Next Trip</Text>
           <Text style={styles.assignmentText}>
-            📍 Dropoff: {nextDispatch.location}
+            Dropoff: {nextTrip.destination}
           </Text>
           <Text style={styles.assignmentText}>
-            👤 Client: {nextDispatch.recipient}
+            Client: {nextTrip.recipient_name}
           </Text>
-
 
           <TouchableOpacity
             style={styles.startButton}
@@ -200,8 +212,8 @@ export default function HomeScreen() {
               router.push({
                 pathname: "/map",
                 params: {
-                  dispatchId: nextDispatch.id,
-                  destination: nextDispatch.location,
+                  dispatchId: nextTrip.dispatch_id,
+                  destination: nextTrip.destination,
                 },
               })
             }
@@ -213,50 +225,65 @@ export default function HomeScreen() {
         <Text style={styles.noDispatch}>No upcoming dispatches</Text>
       )}
 
+      {/* YOUR DROP-OFFS LIST */}
       <Text style={styles.sectionTitle}>Your drop-offs</Text>
+
       <FlatList
         data={trips}
         keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.tripItem, styles.shadow]}
-            onPress={() =>
-              router.push({
-                pathname: "/map",
-                params: {
-                  dispatchId: item.dispatch_id,
-                  destination: item.destination,
-                },
-              })
-            }
-          >
-            <Ionicons name="location-outline" size={22} color="#eec332" />
-            <View style={{ marginLeft: 10 }}>
+        renderItem={({ item }) => {
+          const isActive = nextTrip?.dispatch_id === item.dispatch_id;
 
-              <Text style={styles.tripText}>
-                📍 Dropoff: {item.destination}
-              </Text>
-              <Text style={styles.tripText}>
-                👤 Client: {item.recipient_name}
-              </Text>
-              <Text
-                style={[
-                  styles.tripStatus,
-                  item.status === "completed"
-                    ? { color: "#16a34a" }
-                    : { color: "#f97316" },
-                ]}
-              >
-                {item.status}
-              </Text>
-            </View>
-          </TouchableOpacity>
+          return (
+            <TouchableOpacity
+              style={[styles.tripItem, styles.shadow]}
+              onPress={() =>
+                router.push({
+                  pathname: "/map",
+                  params: {
+                    dispatchId: item.dispatch_id,
+                    destination: item.destination,
+                  },
+                })
+              }
+            >
+              <Ionicons
+                name="location-outline"
+                size={22}
+                color={isActive ? "#2563eb" : "#eec332"}
+              />
+              <View style={{ marginLeft: 10, flex: 1 }}>
+                <Text style={styles.tripText}>
+                  Dropoff: {item.destination}
+                </Text>
+                <Text style={styles.tripText}>
+                  Client: {item.recipient_name}
+                </Text>
+                <Text
+                  style={[
+                    styles.tripStatus,
+                    item.status === "completed"
+                      ? { color: "#16a34a" }
+                      : { color: "#f97316" },
+                  ]}
+                >
+                  {item.status}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={() => (
+          <Text style={styles.noDispatch}>No trips yet</Text>
         )}
       />
     </View>
   );
 }
 
+/* -------------------------------------------------
+ *  Styles – unchanged except tiny tweaks for icons
+ * ------------------------------------------------- */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -301,12 +328,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   tripText: { fontSize: 16, fontWeight: "500", color: "#111827" },
-  tripStatus: { fontSize: 14, fontWeight: "600" },
+  tripStatus: { fontSize: 14, fontWeight: "600", marginTop: 2 },
   noDispatch: { fontSize: 14, color: "#6b7280", marginBottom: 25 },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
   shadow: {
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6 },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+      },
       android: { elevation: 3 },
     }),
   },

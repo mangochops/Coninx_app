@@ -8,14 +8,16 @@ import {
   TextInput,
   TouchableOpacity,
   Modal,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import MapView, { Marker, Polyline } from "react-native-maps";
+import * as Location from "expo-location";
 import EventSource from "react-native-sse";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY!;
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL!;
 
 interface Trip {
   id: number;
@@ -36,6 +38,7 @@ interface DropoffMarker {
 }
 
 export default function MapScreen() {
+  /* ---------- Params ---------- */
   const rawParams = useLocalSearchParams();
   const destination = Array.isArray(rawParams.destination)
     ? rawParams.destination[0]
@@ -44,12 +47,20 @@ export default function MapScreen() {
     ? rawParams.dispatchId[0]
     : rawParams.dispatchId;
 
+  /* ---------- State ---------- */
   const [driverId, setDriverId] = useState<string | null>(null);
-  const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [destCoords, setDestCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [routeCoords, setRouteCoords] = useState<any[]>([]);
-  const [allDropoffs, setAllDropoffs] = useState<DropoffMarker[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [driverLocation, setDriverLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [destCoords, setDestCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [routeCoords, setRouteCoords] = useState<
+    { latitude: number; longitude: number }[]
+  >([]);
+  const [allDropoffs, hisetAllDropoffs] = useState<DropoffMarker[]>([]);
   const [eta, setEta] = useState<string | null>(null);
   const [distance, setDistance] = useState<string | null>(null);
   const [otpModalVisible, setOtpModalVisible] = useState(false);
@@ -57,74 +68,105 @@ export default function MapScreen() {
   const [otpCode, setOtpCode] = useState("");
   const [otpStage, setOtpStage] = useState<"phone" | "code">("phone");
   const [loadingAction, setLoadingAction] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true); // only for the very first spinner
 
   const mapRef = useRef<MapView>(null);
   const sseRef = useRef<EventSource | null>(null);
   const hasFetchedRoute = useRef(false);
+  const locationWatcher = useRef<Location.LocationSubscription | null>(null);
 
-  // Load driverId
+  /* ---------- Load driverId ---------- */
   useEffect(() => {
-    const loadDriverId = async () => {
-      const storedId = await AsyncStorage.getItem("driverId");
-      if (storedId) setDriverId(storedId);
+    const load = async () => {
+      const id = await AsyncStorage.getItem("driverId");
+      if (id) setDriverId(id);
     };
-    loadDriverId();
+    load();
   }, []);
 
-  // Poll active trip location
+  /* ---------- Device GPS (fallback) ---------- */
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission denied", "Location access is required.");
+        return;
+      }
+
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      setDriverLocation({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+
+      // keep watching
+      locationWatcher.current = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 10 },
+        (pos) => {
+          setDriverLocation({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+        }
+      );
+    })();
+
+    return () => {
+      locationWatcher.current?.remove();
+    };
+  }, []);
+
+  /* ---------- Backend trip location (polling) ---------- */
   useEffect(() => {
     if (!dispatchId) return;
-    let interval: ReturnType<typeof setInterval>;
 
-    const fetchTripLocation = async () => {
+    const fetchTrip = async () => {
       try {
         const res = await fetch(`${BACKEND_URL}/dispatches/${dispatchId}/trips`);
-        const trips = await res.json();
-        if (trips.length > 0 && trips[0].latitude && trips[0].longitude) {
-          const loc = { latitude: trips[0].latitude, longitude: trips[0].longitude };
-          setDriverLocation(loc);
-          if (loc.latitude !== 0 && loc.longitude !== 0) {
-            setLoading(false);
-          }
+        const trips: Trip[] = await res.json();
+        const active = trips.find((t) => t.status !== "completed");
+        if (active?.latitude && active?.longitude) {
+          setDriverLocation({
+            latitude: active.latitude,
+            longitude: active.longitude,
+          });
         }
-      } catch (err) {
-        console.log("Trip location fetch error:", err);
-      }
+      } catch (_) { }
     };
 
-    fetchTripLocation();
-    interval = setInterval(fetchTripLocation, 5000);
-    return () => clearInterval(interval);
+    fetchTrip();
+    const id = setInterval(fetchTrip, 8000);
+    return () => clearInterval(id);
   }, [dispatchId]);
 
-  // SSE for real-time updates
+  /* ---------- SSE real-time updates ---------- */
   useEffect(() => {
     if (!dispatchId) return;
 
-    const sseUrl = `${BACKEND_URL}/events`;
-    sseRef.current = new EventSource(sseUrl);
+    const url = `${BACKEND_URL}/events`;
+    sseRef.current = new EventSource(url);
 
-    sseRef.current.addEventListener("message", (event) => {
+    sseRef.current.addEventListener("message", (ev) => {
       try {
-        if (!event.data) return;
-        const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        if (data.type === "location_update" && data.trip.dispatch_id === parseInt(dispatchId)) {
+        const data = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+        if (
+          data.type === "location_update" &&
+          data.trip.dispatch_id === parseInt(dispatchId)
+        ) {
           setDriverLocation({
             latitude: data.trip.latitude,
             longitude: data.trip.longitude,
           });
         }
-      } catch (err) {
-        console.log("SSE parse error:", err);
-      }
+      } catch (_) { }
     });
 
-    return () => {
-      sseRef.current?.close();
-    };
+    return () => sseRef.current?.close();
   }, [dispatchId]);
 
-  // Animate to driver
+  /* ---------- Animate map to driver ---------- */
   useEffect(() => {
     if (!driverLocation || !mapRef.current) return;
     mapRef.current.animateToRegion(
@@ -134,116 +176,107 @@ export default function MapScreen() {
         latitudeDelta: 0.02,
         longitudeDelta: 0.02,
       },
-      1000
+      800
     );
   }, [driverLocation]);
 
-  // Geocode current destination
+  /* ---------- Geocode current destination ---------- */
   useEffect(() => {
     if (!destination) return;
-    const fetchDest = async () => {
+    const geocode = async () => {
       try {
-        const res = await fetch(
+        const r = await fetch(
           `https://maps.googleapis.com/maps/api/geocoding/json?address=${encodeURIComponent(
             destination
           )}&key=${GOOGLE_MAPS_API_KEY}`
         );
-        const data = await res.json();
-        if (data.results?.[0]) {
-          const loc = data.results[0].geometry.location;
-          setDestCoords({ latitude: loc.lat, longitude: loc.lng });
+        const j = await r.json();
+        if (j.results?.[0]) {
+          const { lat, lng } = j.results[0].geometry.location;
+          setDestCoords({ latitude: lat, longitude: lng });
         }
-      } catch (err) {
-        console.log("Geocode error:", err);
-      }
+      } catch (_) { }
     };
-    fetchDest();
+    geocode();
   }, [destination]);
 
-  // Fetch ALL trips for this driver and geocode drop-offs
+  /* ---------- Load ALL driver trips & geocode drop-offs ---------- */
   useEffect(() => {
     if (!driverId) return;
 
-    const fetchAllTrips = async () => {
+    const load = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/admin/drivers/${driverId}/trips`);
-        const trips: Trip[] = await res.json();
+        const r = await fetch(`${BACKEND_URL}/admin/drivers/${driverId}/trips`);
+        const trips: Trip[] = await r.json();
 
-        const geocodedDropoffs: DropoffMarker[] = [];
-
-        for (const trip of trips) {
-          if (!trip.destination) continue;
-
+        const markers: DropoffMarker[] = [];
+        for (const t of trips) {
+          if (!t.destination) continue;
           try {
-            const geoRes = await fetch(
+            const g = await fetch(
               `https://maps.googleapis.com/maps/api/geocoding/json?address=${encodeURIComponent(
-                trip.destination
+                t.destination
               )}&key=${GOOGLE_MAPS_API_KEY}`
             );
-            const geoData = await geoRes.json();
-            if (geoData.results?.[0]) {
-              const loc = geoData.results[0].geometry.location;
-              geocodedDropoffs.push({
-                latitude: loc.lat,
-                longitude: loc.lng,
-                title: trip.recipient_name || "Drop-off",
-                description: trip.destination,
-                isCurrent: trip.dispatch_id === parseInt(dispatchId || "0"),
+            const j = await g.json();
+            if (j.results?.[0]) {
+              const { lat, lng } = j.results[0].geometry.location;
+              markers.push({
+                latitude: lat,
+                longitude: lng,
+                title: t.recipient_name || "Drop-off",
+                description: t.destination,
+                isCurrent: t.dispatch_id === parseInt(dispatchId || "0"),
               });
             }
-          } catch (err) {
-            console.log(`Geocode failed for ${trip.destination}:`, err);
-          }
+          } catch (_) { }
         }
-
-        setAllDropoffs(geocodedDropoffs);
-      } catch (err) {
-        console.log("Fetch trips error:", err);
-      }
+        hisetAllDropoffs(markers);
+      } catch (_) { }
     };
-
-    fetchAllTrips();
+    load();
   }, [driverId, dispatchId]);
 
-  // Fetch route to current destination
+  /* ---------- Directions to current destination ---------- */
   useEffect(() => {
     if (!driverLocation || !destCoords || hasFetchedRoute.current) return;
 
-    const fetchRoute = async () => {
+    const fetchDir = async () => {
       try {
         const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${driverLocation.latitude},${driverLocation.longitude}&destination=${destCoords.latitude},${destCoords.longitude}&key=${GOOGLE_MAPS_API_KEY}`;
-        const res = await fetch(url);
-        const data = await res.json();
+        const r = await fetch(url);
+        const j = await r.json();
 
-        if (data.routes[0]) {
-          const points = decodePolyline(data.routes[0].overview_polyline.points);
+        if (j.routes?.[0]) {
+          const points = decodePolyline(j.routes[0].overview_polyline.points);
           setRouteCoords(points);
 
-          const leg = data.routes[0].legs[0];
+          const leg = j.routes[0].legs[0];
           setEta(leg.duration.text);
           setDistance(leg.distance.text);
 
-          if (mapRef.current && points.length > 0) {
+          if (mapRef.current && points.length) {
             mapRef.current.fitToCoordinates(points, {
-              edgePadding: { top: 100, left: 100, bottom: 100, right: 100 },
-              animated: false,
+              edgePadding: { top: 120, left: 80, bottom: 120, right: 80 },
+              animated: true,
             });
           }
-
           hasFetchedRoute.current = true;
         }
-      } catch (err) {
-        console.log("Route fetch error:", err);
-      }
+      } catch (_) { }
     };
-    fetchRoute();
+    fetchDir();
   }, [driverLocation, destCoords]);
 
   const decodePolyline = (t: string) => {
-    let points: any[] = [];
-    let index = 0, lat = 0, lng = 0;
+    const points: { latitude: number; longitude: number }[] = [];
+    let index = 0,
+      lat = 0,
+      lng = 0;
     while (index < t.length) {
-      let b, shift = 0, result = 0;
+      let b,
+        shift = 0,
+        result = 0;
       do {
         b = t.charCodeAt(index++) - 63;
         result |= (b & 0x1f) << shift;
@@ -252,7 +285,8 @@ export default function MapScreen() {
       const dlat = result & 1 ? ~(result >> 1) : result >> 1;
       lat += dlat;
 
-      shift = 0; result = 0;
+      shift = 0;
+      result = 0;
       do {
         b = t.charCodeAt(index++) - 63;
         result |= (b & 0x1f) << shift;
@@ -266,87 +300,95 @@ export default function MapScreen() {
     return points;
   };
 
-  // OTP Handlers (unchanged)
-  const handleSendOTP = async () => {
+  /* ---------- OTP Handlers (unchanged) ---------- */
+  const sendOTP = async () => {
     if (!receiverPhone.trim()) return Alert.alert("Error", "Enter phone number");
     setLoadingAction(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/dispatches/${dispatchId}/send-otp`, {
+      const r = await fetch(`${BACKEND_URL}/dispatches/${dispatchId}/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: receiverPhone }),
       });
-      const data = await res.json();
-      if (res.ok) {
+      const d = await r.json();
+      if (r.ok) {
         Alert.alert("OTP Sent", "Check the receiver's phone.");
         setOtpStage("code");
       } else {
-        Alert.alert("Error", data.message || "Failed");
+        Alert.alert("Error", d.message || "Failed");
       }
-    } catch (err) {
+    } catch {
       Alert.alert("Error", "Network error");
     } finally {
       setLoadingAction(false);
     }
   };
 
-  const handleVerifyOTP = async () => {
+  const verifyOTP = async () => {
     if (!otpCode.trim()) return Alert.alert("Error", "Enter OTP");
     setLoadingAction(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/dispatches/${dispatchId}/verify-otp`, {
+      const r = await fetch(`${BACKEND_URL}/dispatches/${dispatchId}/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: otpCode }),
       });
-      const data = await res.json();
-      if (res.ok) {
+      const d = await r.json();
+      if (r.ok) {
         Alert.alert("Success", "Delivery confirmed!", [
           { text: "OK", onPress: () => router.replace("/(tabs)") },
         ]);
         setOtpModalVisible(false);
       } else {
-        Alert.alert("Invalid", data.message || "Wrong OTP");
+        Alert.alert("Invalid", d.message || "Wrong OTP");
       }
-    } catch (err) {
+    } catch {
       Alert.alert("Error", "Verification failed");
     } finally {
       setLoadingAction(false);
     }
   };
 
-  if (loading) {
+  /* ---------- First-load spinner (only once) ---------- */
+  useEffect(() => {
+    const timer = setTimeout(() => setInitialLoad(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (initialLoad) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#2563eb" />
-        <Text style={{ marginTop: 10 }}>Loading map & drop-offs...</Text>
+        <Text style={{ marginTop: 12, color: "#555" }}>Loading map…</Text>
       </View>
     );
   }
 
+  /* ---------- Main render ---------- */
   return (
     <View style={styles.container}>
       <MapView
         ref={mapRef}
         provider="google"
         style={styles.map}
+        showsUserLocation={false}
         initialRegion={{
-          latitude: driverLocation?.latitude || 0,
-          longitude: driverLocation?.longitude || 0,
+          latitude: driverLocation?.latitude ?? -1.286389,
+          longitude: driverLocation?.longitude ?? 36.817223,
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         }}
       >
-        {/* Driver Marker */}
+        {/* Driver marker */}
         {driverLocation && (
           <Marker
             coordinate={driverLocation}
             title="You are here"
-            pinColor="blue"
+            pinColor="#2563eb"
           />
         )}
 
-        {/* Current Destination (Red) */}
+        {/* Current destination (red) */}
         {destCoords && (
           <Marker
             coordinate={destCoords}
@@ -356,26 +398,30 @@ export default function MapScreen() {
           />
         )}
 
-        {/* All Other Drop-offs (Yellow) */}
+        {/* Other drop-offs (orange) */}
         {allDropoffs
           .filter((d) => !d.isCurrent)
-          .map((dropoff, i) => (
+          .map((d, i) => (
             <Marker
               key={i}
-              coordinate={{ latitude: dropoff.latitude, longitude: dropoff.longitude }}
-              title={dropoff.title}
-              description={dropoff.description}
+              coordinate={{ latitude: d.latitude, longitude: d.longitude }}
+              title={d.title}
+              description={d.description}
               pinColor="orange"
             />
           ))}
 
-        {/* Route to Current Destination */}
+        {/* Route polyline */}
         {routeCoords.length > 0 && (
-          <Polyline coordinates={routeCoords} strokeColor="#2563eb" strokeWidth={5} />
+          <Polyline
+            coordinates={routeCoords}
+            strokeColor="#2563eb"
+            strokeWidth={5}
+          />
         )}
       </MapView>
 
-      {/* ETA Box */}
+      {/* ETA / Distance */}
       {(eta || distance) && (
         <View style={styles.etaBox}>
           <Text style={styles.etaText}>
@@ -384,7 +430,7 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* End Trip Button */}
+      {/* End-Trip button */}
       <TouchableOpacity
         style={styles.endTripButton}
         onPress={() => setOtpModalVisible(true)}
@@ -407,12 +453,15 @@ export default function MapScreen() {
                   onChangeText={setReceiverPhone}
                 />
                 <TouchableOpacity
-                  style={[styles.verifyButton, loadingAction && { opacity: 0.6 }]}
-                  onPress={handleSendOTP}
+                  style={[
+                    styles.verifyButton,
+                    loadingAction && { opacity: 0.6 },
+                  ]}
+                  onPress={sendOTP}
                   disabled={loadingAction}
                 >
                   <Text style={styles.verifyText}>
-                    {loadingAction ? "Sending..." : "Send OTP"}
+                    {loadingAction ? "Sending…" : "Send OTP"}
                   </Text>
                 </TouchableOpacity>
               </>
@@ -427,12 +476,15 @@ export default function MapScreen() {
                   onChangeText={setOtpCode}
                 />
                 <TouchableOpacity
-                  style={[styles.verifyButton, loadingAction && { opacity: 0.6 }]}
-                  onPress={handleVerifyOTP}
+                  style={[
+                    styles.verifyButton,
+                    loadingAction && { opacity: 0.6 },
+                  ]}
+                  onPress={verifyOTP}
                   disabled={loadingAction}
                 >
                   <Text style={styles.verifyText}>
-                    {loadingAction ? "Verifying..." : "Verify"}
+                    {loadingAction ? "Verifying…" : "Verify"}
                   </Text>
                 </TouchableOpacity>
               </>
@@ -441,8 +493,8 @@ export default function MapScreen() {
               onPress={() => {
                 setOtpModalVisible(false);
                 setOtpStage("phone");
-                setOtpCode("");
                 setReceiverPhone("");
+                setOtpCode("");
               }}
             >
               <Text style={styles.cancelText}>Cancel</Text>
@@ -450,24 +502,41 @@ export default function MapScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* No-driver-location overlay (rare) */}
+      {!driverLocation && (
+        <View style={styles.noLocationOverlay}>
+          <Text style={styles.noLocationText}>
+            Waiting for your location…
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
 
-// Styles unchanged
+/* ---------- Styles (unchanged + tiny additions) ---------- */
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  map: { flex: 1, width: '100%', height: '100%' },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  map: { flex: 1 },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
   etaBox: {
     position: "absolute",
-    top: 40,
+    top: 50,
     alignSelf: "center",
     backgroundColor: "rgba(255,255,255,0.95)",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 12,
-    elevation: 3,
+    ...Platform.select({
+      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6 },
+      android: { elevation: 4 },
+    }),
   },
   etaText: { fontWeight: "600", color: "#2563eb" },
   endTripButton: {
@@ -478,9 +547,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingVertical: 14,
     borderRadius: 30,
-    elevation: 5,
+    ...Platform.select({
+      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6 },
+      android: { elevation: 5 },
+    }),
   },
-  endTripText: { color: "white", fontWeight: "700", fontSize: 16 },
+  endTripText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -489,7 +561,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: "85%",
-    backgroundColor: "white",
+    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 20,
     alignItems: "center",
@@ -511,6 +583,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
   },
-  verifyText: { color: "white", fontWeight: "600" },
-  cancelText: { color: "#dc2626", marginTop: 10 },
+  verifyText: { color: "#fff", fontWeight: "600" },
+  cancelText: { color: "#dc2626", marginTop: 12 },
+  noLocationOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  noLocationText: { fontSize: 16, color: "#555" },
 });
