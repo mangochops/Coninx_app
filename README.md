@@ -17,7 +17,7 @@ Coninx_app is a dedicated drivers dispatch and management application designed t
 - 🔐 **Secure Authentication**: Register and login functionality for drivers.
 - 🗺️ **Interactive Maps**: Real-time visualization of current and upcoming trip locations.
 - 📍 **GPS Tracking**: Automatic location updates to the backend during active trips.
-- 📦 **Dispatch Dashboard**: View assigned trips and manage drop-off statuses.
+- 📦 **Dispatch Dashboard**: View assigned trips and manage drop-offs.
 - 🔄 **Real-time Updates**: Uses Server-Sent Events (SSE) to sync trip locations.
 - 🔢 **OTP Verification**: Securely confirm deliveries using recipient OTPs.
 - 👤 **Driver Profile**: View personal driver information and comprehensive delivery history.
